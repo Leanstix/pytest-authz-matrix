@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +40,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption(
         "--authz-fail-under",
         action="store",
-        type=float,
+        type=_percentage,
         metavar="PERCENT",
         help="fail when discovered DRF route coverage is below this percentage",
     )
@@ -51,7 +52,7 @@ def pytest_configure(config: pytest.Config) -> None:
         "authz_contract(name): expand a test across every case in an authorization contract",
     )
     if _reporting_requested(config):
-        setattr(config, "_authz_matrix_reporter", AuthorizationReporter())
+        config.__dict__["_authz_matrix_reporter"] = AuthorizationReporter()
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
@@ -63,7 +64,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         json_path = session.config.getoption("--authz-report-json")
         if json_path:
             requested = Path(json_path)
-            path = requested if requested.is_absolute() else Path(session.config.rootpath) / requested
+            path = (
+                requested if requested.is_absolute() else Path(session.config.rootpath) / requested
+            )
             reporter.write_json(path)
         threshold = session.config.getoption("--authz-fail-under")
         coverage = reporter.route_coverage
@@ -93,7 +96,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     marker = metafunc.definition.get_closest_marker("authz_contract")
     if marker is None or len(marker.args) != 1 or not isinstance(marker.args[0], str):
         raise pytest.UsageError(
-            "Tests using authz_case must declare @pytest.mark.authz_contract(\"contract.name\")"
+            'Tests using authz_case must declare @pytest.mark.authz_contract("contract.name")'
         )
 
     config = _get_config(metafunc.config)
@@ -135,7 +138,7 @@ def authz_case(request: pytest.FixtureRequest) -> AuthorizationCase:
 
 
 def _get_config(pytest_config: pytest.Config) -> MatrixConfig:
-    cached = getattr(pytest_config, _CONFIG_ATTR, None)
+    cached: MatrixConfig | None = getattr(pytest_config, _CONFIG_ATTR, None)
     if cached is not None:
         return cached
     requested = Path(pytest_config.getoption("--authz-config"))
@@ -159,3 +162,13 @@ def _reporting_requested(config: pytest.Config) -> bool:
         or config.getoption("--authz-report-json")
         or config.getoption("--authz-fail-under") is not None
     )
+
+
+def _percentage(value: str) -> float:
+    try:
+        percentage = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a number from 0 through 100") from exc
+    if percentage < 0 or percentage > 100:
+        raise argparse.ArgumentTypeError("must be from 0 through 100")
+    return percentage

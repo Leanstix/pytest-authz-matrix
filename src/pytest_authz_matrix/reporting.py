@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from pytest_authz_matrix.discovery import (
-    DiscoveryResult,
     DiscoveredRoute,
+    DiscoveryResult,
     covered_routes,
     discover_drf_routes,
 )
@@ -76,7 +76,7 @@ class AuthorizationReporter:
         contracts_exercised = sorted({result.contract for result in self.results.values()})
         return {
             "schema_version": 1,
-            "generated_at": datetime.now(UTC).isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
             "summary": {
                 "configured_cases": self.total_cases,
                 "asserted_cases": len(self.results),
@@ -100,8 +100,12 @@ class AuthorizationReporter:
                 "reason": self.discovery.reason,
                 "total": len(self.discovery.routes),
                 "covered": len(self.covered),
-                "coverage_percent": round(route_coverage, 2) if route_coverage is not None else None,
-                "uncovered": [route.id for route in sorted(self.uncovered, key=lambda item: item.id)],
+                "coverage_percent": (
+                    round(route_coverage, 2) if route_coverage is not None else None
+                ),
+                "uncovered": [
+                    route.id for route in sorted(self.uncovered, key=lambda item: item.id)
+                ],
             },
             "error": self.error,
         }
@@ -130,11 +134,11 @@ class AuthorizationReporter:
             lines.append(f"DRF route coverage: unavailable ({self.discovery.reason})")
         else:
             lines.append(
-                f"DRF route coverage: {len(self.covered)}/{len(self.discovery.routes)} ({coverage:.1f}%)"
+                "DRF route coverage: "
+                f"{len(self.covered)}/{len(self.discovery.routes)} ({coverage:.1f}%)"
             )
             for route in sorted(self.uncovered, key=lambda item: item.id)[:20]:
                 lines.append(f"  missing: {route.method} {route.name or route.pattern}")
             if len(self.uncovered) > 20:
                 lines.append(f"  ... and {len(self.uncovered) - 20} more")
         return lines
-

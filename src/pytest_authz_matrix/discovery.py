@@ -40,10 +40,20 @@ def discover_drf_routes() -> DiscoveryResult:
     """Walk Django's root URL resolver and return DRF methods only."""
 
     try:
-        from django.urls import URLPattern, URLResolver, get_resolver
-        from rest_framework.views import APIView
+        from django.conf import settings  # type: ignore[import-untyped]
+        from django.urls import (  # type: ignore[import-untyped]
+            URLPattern,
+            URLResolver,
+            get_resolver,
+        )
     except ImportError:
         return DiscoveryResult(False, reason="Django REST Framework is not installed")
+    if not settings.configured:
+        return DiscoveryResult(False, reason="Django settings are not configured")
+    try:
+        from rest_framework.views import APIView  # type: ignore[import-untyped]
+    except Exception as exc:
+        return DiscoveryResult(False, reason=f"Django REST Framework is unavailable: {exc}")
 
     try:
         root = get_resolver()
@@ -58,7 +68,9 @@ def discover_drf_routes() -> DiscoveryResult:
             if isinstance(item, URLResolver):
                 child_namespace = namespace
                 if item.namespace:
-                    child_namespace = f"{namespace}:{item.namespace}" if namespace else item.namespace
+                    child_namespace = (
+                        f"{namespace}:{item.namespace}" if namespace else item.namespace
+                    )
                 walk(list(item.url_patterns), current_pattern, child_namespace)
                 continue
             if not isinstance(item, URLPattern):
@@ -110,8 +122,8 @@ def normalize_path(path: str) -> str:
     """Normalize OpenAPI-like, Django converter, and regex path parameters."""
 
     normalized = _TEMPLATE_PARAMETER.sub("{}", path)
-    normalized = _DJANGO_CONVERTER.sub("{}", normalized)
     normalized = _REGEX_GROUP.sub("{}", normalized)
+    normalized = _DJANGO_CONVERTER.sub("{}", normalized)
     normalized = normalized.replace("^", "").replace("$", "")
     normalized = normalized.replace("\\Z", "")
     normalized = re.sub(r"/+$", "", normalized.lstrip("/"))
@@ -128,9 +140,10 @@ def _view_methods(callback: Any, view_class: type[Any]) -> tuple[str, ...]:
             for method in getattr(view_class, "http_method_names", ())
             if callable(getattr(view_class, method, None))
         )
-    return tuple(
-        sorted({str(method).upper() for method in methods if str(method).upper() not in {"HEAD", "OPTIONS"}})
-    )
+    allowed = {
+        str(method).upper() for method in methods if str(method).upper() not in {"HEAD", "OPTIONS"}
+    }
+    return tuple(sorted(allowed))
 
 
 def _matches(route: DiscoveredRoute, contract: ContractSpec) -> bool:
@@ -139,4 +152,3 @@ def _matches(route: DiscoveredRoute, contract: ContractSpec) -> bool:
     if contract.route_name and route.name:
         return contract.route_name in {route.name, route.name.rsplit(":", 1)[-1]}
     return normalize_path(route.pattern) == normalize_path(contract.path)
-

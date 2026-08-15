@@ -77,13 +77,9 @@ def _resolve_value(value: Any, path: str) -> Any:
     current = value
     try:
         for part in path.split("."):
-            if isinstance(current, Mapping):
-                current = current[part]
-            else:
-                current = getattr(current, part)
+            current = current[part] if isinstance(current, Mapping) else getattr(current, part)
     except (KeyError, AttributeError) as exc:
         raise AuthzExecutionError(f"Could not resolve {path!r} from {value!r}") from exc
     if current is None:
         raise AuthzExecutionError(f"Resolved path value {path!r} is null")
     return current
-

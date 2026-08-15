@@ -83,7 +83,9 @@ class AuthorizationCase:
         client = self._fixture(self.spec.actor.client_fixture)
         request_spec = self.spec.contract.request
         request_data = self._optional_fixture(request_spec.data_fixture) if data is _UNSET else data
-        query_data = self._optional_fixture(request_spec.query_fixture) if query is _UNSET else query
+        query_data = (
+            self._optional_fixture(request_spec.query_fixture) if query is _UNSET else query
+        )
         path = _append_query(self.path, query_data)
         request_headers = dict(request_spec.headers)
         if headers:
@@ -148,7 +150,9 @@ def _append_query(path: str, query: Any | None) -> str:
         try:
             encoded = urlencode(query, doseq=True)
         except (TypeError, ValueError) as exc:
-            raise AuthzExecutionError("Query fixture must be a string or urlencode-compatible value") from exc
+            raise AuthzExecutionError(
+                "Query fixture must be a string or urlencode-compatible value"
+            ) from exc
     if not encoded:
         return path
     separator = "&" if "?" in path else "?"
@@ -167,4 +171,3 @@ def _response_detail(response: Any) -> str:
     if len(rendered) > 300:
         rendered = rendered[:297] + "..."
     return f"; response={rendered}"
-

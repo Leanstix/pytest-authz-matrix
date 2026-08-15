@@ -11,4 +11,3 @@ class AuthzConfigurationError(AuthzMatrixError):
 
 class AuthzExecutionError(AuthzMatrixError):
     """Raised when a generated authorization case cannot be executed."""
-

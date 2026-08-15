@@ -102,7 +102,9 @@ def _parse_contracts(
         path = _required_string(contract, "path", location)
         resource_name = contract.get("resource")
         if resource_name is not None and resource_name not in resources:
-            raise AuthzConfigurationError(f"{location}.resource references unknown resource {resource_name!r}")
+            raise AuthzConfigurationError(
+                f"{location}.resource references unknown resource {resource_name!r}"
+            )
 
         matrix = _parse_matrix(
             _mapping(contract.get("matrix"), f"{location}.matrix"),
@@ -157,17 +159,13 @@ def _parse_matrix(
                 for relationship, expectation in relationships.items()
             }
         else:
-            matrix[actor_name] = {
-                None: _expectation(value, outcomes, f"{location}.{actor_name}")
-            }
+            matrix[actor_name] = {None: _expectation(value, outcomes, f"{location}.{actor_name}")}
     if not matrix:
         raise AuthzConfigurationError(f"{location} must not be empty")
     return matrix
 
 
-def _expectation(
-    raw: Any, outcomes: Mapping[str, tuple[int, ...]], location: str
-) -> Expectation:
+def _expectation(raw: Any, outcomes: Mapping[str, tuple[int, ...]], location: str) -> Expectation:
     if isinstance(raw, str):
         outcome = raw
         statuses = outcomes.get(outcome)
@@ -175,7 +173,7 @@ def _expectation(
             raise AuthzConfigurationError(f"{location} references unknown outcome {outcome!r}")
         return Expectation(outcome=outcome, statuses=statuses)
     if isinstance(raw, int):
-        return Expectation(outcome="status", statuses=(raw,))
+        return Expectation(outcome="status", statuses=_statuses(raw, location))
     if isinstance(raw, list):
         return Expectation(outcome="status", statuses=_statuses(raw, location))
 
@@ -211,7 +209,9 @@ def _parse_request(raw: Any, location: str) -> RequestSpec:
 
 def _statuses(value: Any, location: str) -> tuple[int, ...]:
     values = value if isinstance(value, list) else [value]
-    if not values or any(not isinstance(status, int) or isinstance(status, bool) for status in values):
+    if not values or any(
+        not isinstance(status, int) or isinstance(status, bool) for status in values
+    ):
         raise AuthzConfigurationError(f"{location} must contain one or more integer HTTP statuses")
     invalid = [status for status in values if status < 100 or status > 599]
     if invalid:
@@ -239,4 +239,3 @@ def _optional_string(
     if result is not None and not isinstance(result, str):
         raise AuthzConfigurationError(f"{location}.{key} must be a string or null")
     return result
-

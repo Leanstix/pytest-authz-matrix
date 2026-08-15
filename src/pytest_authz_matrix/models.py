@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 DEFAULT_OUTCOMES: dict[str, tuple[int, ...]] = {
     "allow": (200,),
     "deny": (403,),
@@ -88,4 +87,3 @@ class CaseSpec:
     def id(self) -> str:
         relationship = self.relationship or "endpoint"
         return f"{self.contract.name}[{self.actor.name}-{relationship}-{self.expectation.outcome}]"
-
