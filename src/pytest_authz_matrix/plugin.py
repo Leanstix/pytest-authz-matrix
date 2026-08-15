@@ -11,6 +11,7 @@ from pytest_authz_matrix.case import AuthorizationCase
 from pytest_authz_matrix.config import load_config
 from pytest_authz_matrix.exceptions import AuthzConfigurationError
 from pytest_authz_matrix.models import CaseSpec, MatrixConfig
+from pytest_authz_matrix.reporting import AuthorizationReporter
 
 _CONFIG_ATTR = "_authz_matrix_contract_config"
 
@@ -49,6 +50,41 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "authz_contract(name): expand a test across every case in an authorization contract",
     )
+    if _reporting_requested(config):
+        setattr(config, "_authz_matrix_reporter", AuthorizationReporter())
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    reporter = _get_recorder(session.config)
+    if reporter is None:
+        return
+    try:
+        reporter.finalize(_get_config(session.config))
+        json_path = session.config.getoption("--authz-report-json")
+        if json_path:
+            requested = Path(json_path)
+            path = requested if requested.is_absolute() else Path(session.config.rootpath) / requested
+            reporter.write_json(path)
+        threshold = session.config.getoption("--authz-fail-under")
+        coverage = reporter.route_coverage
+        if threshold is not None and (coverage is None or coverage < threshold):
+            session.exitstatus = pytest.ExitCode.TESTS_FAILED
+    except (AuthzConfigurationError, pytest.UsageError, OSError) as exc:
+        reporter.error = str(exc)
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+def pytest_terminal_summary(
+    terminalreporter: pytest.TerminalReporter, exitstatus: int, config: pytest.Config
+) -> None:
+    if not config.getoption("--authz-report"):
+        return
+    reporter = _get_recorder(config)
+    if reporter is None:
+        return
+    terminalreporter.section("authorization matrix")
+    for line in reporter.terminal_lines():
+        terminalreporter.write_line(line)
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
@@ -116,3 +152,10 @@ def _get_recorder(pytest_config: pytest.Config) -> Any | None:
     # Reporting is installed lazily so using the core plugin has near-zero overhead.
     return getattr(pytest_config, "_authz_matrix_reporter", None)
 
+
+def _reporting_requested(config: pytest.Config) -> bool:
+    return bool(
+        config.getoption("--authz-report")
+        or config.getoption("--authz-report-json")
+        or config.getoption("--authz-fail-under") is not None
+    )
