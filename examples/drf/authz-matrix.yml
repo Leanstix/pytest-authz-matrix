@@ -1,0 +1,32 @@
+version: 1
+
+actors:
+  owner: owner_client
+  foreign_tenant_user: foreign_tenant_client
+  anonymous: anonymous_client
+
+resources:
+  booking:
+    fixture: booking_matrix
+    lookup: pk
+
+outcomes:
+  allow: [200]
+
+contracts:
+  booking.retrieve:
+    method: GET
+    path: /api/bookings/{resource}/
+    route_name: booking-detail
+    resource: booking
+    matrix:
+      owner:
+        owned: allow
+        foreign_tenant: conceal
+      foreign_tenant_user:
+        owned: conceal
+        foreign_tenant: allow
+      anonymous:
+        owned: unauthenticated
+        foreign_tenant: unauthenticated
+
