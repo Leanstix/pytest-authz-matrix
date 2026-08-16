@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Leanstix/pytest-authz-matrix/actions/workflows/ci.yml/badge.svg)](https://github.com/Leanstix/pytest-authz-matrix/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/Leanstix/pytest-authz-matrix/blob/main/LICENSE)
 
 Authorization contract testing for Python web APIs.
 
@@ -260,7 +260,7 @@ Given a resource fixture object, the following placeholders are available:
 | `{resource.uuid}` | Any mapping key or object attribute on the selected resource. |
 | `{params.estate}` | A static value from the contract's `params` mapping. |
 
-Values are URL-encoded before insertion. See [the full configuration reference](docs/configuration.md)
+Values are URL-encoded before insertion. See [the full configuration reference](https://github.com/Leanstix/pytest-authz-matrix/blob/main/docs/configuration.md)
 for endpoint-only contracts, request options, and validation rules.
 
 ## What this version does not do
@@ -286,8 +286,9 @@ mypy src
 python -m build
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. The architecture and planned
-extension points are documented in [docs/design.md](docs/design.md).
+See [CONTRIBUTING.md](https://github.com/Leanstix/pytest-authz-matrix/blob/main/CONTRIBUTING.md)
+before opening a pull request. The architecture and planned extension points are documented in
+[docs/design.md](https://github.com/Leanstix/pytest-authz-matrix/blob/main/docs/design.md).
 
 ## License
 
