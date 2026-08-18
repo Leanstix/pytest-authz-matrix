@@ -26,10 +26,15 @@ jobs:
         run: python -m pip install -e ".[dev]"
       - name: Test
         run: pytest --cov=pytest_authz_matrix --cov-report=term-missing
+      - name: FastAPI example
+        run: >-
+          pytest examples/fastapi/test_authorization.py
+          --authz-config=examples/fastapi/authz-matrix.yml
+          --authz-report
+          --authz-fail-under=100
       - name: Lint
         run: ruff check src tests
       - name: Type check
         run: mypy src
       - name: Build distributions
         run: python -m build
-
