@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any, Protocol
 from urllib.parse import urlencode
 
+from pytest_authz_matrix.adapters.registry import adapter_for
 from pytest_authz_matrix.exceptions import AuthzExecutionError
 from pytest_authz_matrix.models import CaseSpec
 from pytest_authz_matrix.templating import related_object, render_path
@@ -91,23 +92,13 @@ class AuthorizationCase:
         if headers:
             request_headers.update(headers)
 
-        kwargs: dict[str, Any] = {}
-        if request_data is not None:
-            kwargs["data"] = request_data
-            if request_spec.format is not None:
-                kwargs["format"] = request_spec.format
-        if request_headers:
-            kwargs["headers"] = request_headers
-
-        method = self.spec.contract.method.lower()
-        sender = getattr(client, method, None)
-        if callable(sender):
-            return sender(path, **kwargs)
-        generic = getattr(client, "generic", None)
-        if callable(generic):
-            return generic(self.spec.contract.method, path, **kwargs)
-        raise AuthzExecutionError(
-            f"Fixture {self.spec.actor.client_fixture!r} has neither {method}() nor generic()"
+        return adapter_for(client).execute(
+            client,
+            method=self.spec.contract.method,
+            path=path,
+            data=request_data,
+            format=request_spec.format,
+            headers=request_headers,
         )
 
     def assert_response(self, response: Any) -> Any:
