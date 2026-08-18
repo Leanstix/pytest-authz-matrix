@@ -29,10 +29,17 @@ class AuthorizationCase:
     inspect the response or application state between those operations.
     """
 
-    def __init__(self, request: Any, spec: CaseSpec, recorder: CaseRecorder | None = None) -> None:
+    def __init__(
+        self,
+        request: Any,
+        spec: CaseSpec,
+        recorder: CaseRecorder | None = None,
+        app: Any | None = None,
+    ) -> None:
         self._request = request
         self.spec = spec
         self._recorder = recorder
+        self._app = app
         self._resource_object: Any = _UNSET
 
     @property
@@ -79,7 +86,7 @@ class AuthorizationCase:
         query: Any = _UNSET,
         headers: Mapping[str, str] | None = None,
     ) -> Any:
-        """Send this case through the actor's configured API client fixture."""
+        """Send this case through the actor's configured framework adapter."""
 
         client = self._fixture(self.spec.actor.client_fixture)
         request_spec = self.spec.contract.request
@@ -92,7 +99,8 @@ class AuthorizationCase:
         if headers:
             request_headers.update(headers)
 
-        return adapter_for(client).execute(
+        adapter = adapter_for(client, app=self._app)
+        return adapter.execute(
             client,
             method=self.spec.contract.method,
             path=path,

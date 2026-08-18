@@ -131,10 +131,22 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 
 @pytest.fixture
-def authz_case(request: pytest.FixtureRequest) -> AuthorizationCase:
+def authz_app() -> Any | None:
+    """Optional explicit application fixture used when a client wrapper hides the app."""
+
+    return None
+
+
+@pytest.fixture
+def authz_case(request: pytest.FixtureRequest, authz_app: Any | None) -> AuthorizationCase:
     """Return one generated authorization case for a marked test."""
 
-    return AuthorizationCase(request, request.param, recorder=_get_recorder(request.config))
+    return AuthorizationCase(
+        request,
+        request.param,
+        recorder=_get_recorder(request.config),
+        app=authz_app,
+    )
 
 
 def _get_config(pytest_config: pytest.Config) -> MatrixConfig:
