@@ -179,6 +179,8 @@ class AuthorizationReporter:
 
 
 def _framework_label(framework: str | None) -> str:
+    if framework is None:
+        return "API"
     return {
         "fastapi": "FastAPI",
         "django-rest-framework": "DRF",
