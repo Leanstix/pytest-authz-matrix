@@ -1,10 +1,10 @@
-"""FastAPI TestClient request execution."""
+"""FastAPI TestClient request execution and route discovery."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from pytest_authz_matrix.discovery import DiscoveryResult
+from pytest_authz_matrix.discovery import DiscoveredRoute, DiscoveryResult
 from pytest_authz_matrix.exceptions import AuthzExecutionError
 
 
@@ -56,8 +56,44 @@ class FastAPIAdapter:
         return client.request(method, path, **kwargs)
 
     def discover_routes(self, app: Any | None) -> DiscoveryResult:
+        if app is None:
+            return DiscoveryResult(
+                False,
+                framework=self.name,
+                reason="FastAPI application is unavailable from the configured test client",
+            )
+        if not self.supports_app(app):
+            return DiscoveryResult(
+                False,
+                framework=self.name,
+                reason=f"object {type(app).__name__!r} is not a FastAPI application",
+            )
+        try:
+            from fastapi.routing import APIRoute
+        except ImportError:
+            return DiscoveryResult(
+                False,
+                framework=self.name,
+                reason="FastAPI is not installed",
+            )
+
+        routes: set[DiscoveredRoute] = set()
+        for route in getattr(app, "routes", ()):
+            if not isinstance(route, APIRoute):
+                continue
+            for method in sorted(route.methods or ()):
+                normalized = method.upper()
+                if normalized in {"HEAD", "OPTIONS"}:
+                    continue
+                routes.add(
+                    DiscoveredRoute(
+                        method=normalized,
+                        name=route.name,
+                        pattern=route.path,
+                    )
+                )
         return DiscoveryResult(
-            False,
+            True,
             framework=self.name,
-            reason="FastAPI route discovery is not enabled in this adapter version",
+            routes=tuple(sorted(routes, key=lambda route: route.id)),
         )

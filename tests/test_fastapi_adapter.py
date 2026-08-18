@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -7,14 +8,26 @@ from pytest_authz_matrix.adapters.fastapi import FastAPIAdapter
 from pytest_authz_matrix.exceptions import AuthzExecutionError
 
 
-def test_executes_json_requests_with_httpx_semantics() -> None:
+def build_app() -> FastAPI:
     app = FastAPI()
 
-    @app.patch("/bookings/{booking_id}")
+    @app.get("/bookings/{booking_id}", name="booking-detail")
+    def get_booking(booking_id: int):
+        return {"id": booking_id}
+
+    @app.patch("/bookings/{booking_id}", name="booking-update")
     def update_booking(booking_id: int, payload: dict[str, str]):
         return {"id": booking_id, **payload}
 
-    client = TestClient(app)
+    @app.get("/health", name="health")
+    def health():
+        return {"ok": True}
+
+    return app
+
+
+def test_executes_json_requests_with_httpx_semantics() -> None:
+    client = TestClient(build_app())
     response = FastAPIAdapter().execute(
         client,
         method="PATCH",
@@ -23,16 +36,13 @@ def test_executes_json_requests_with_httpx_semantics() -> None:
         format="json",
         headers={"X-Test": "1"},
     )
-
     assert response.status_code == 200
     assert response.json()["status"] == "approved"
 
 
 def test_rejects_unknown_fastapi_request_format() -> None:
-    app = FastAPI()
-    client = TestClient(app)
-
-    try:
+    client = TestClient(build_app())
+    with pytest.raises(AuthzExecutionError, match="request format 'xml'"):
         FastAPIAdapter().execute(
             client,
             method="POST",
@@ -41,7 +51,14 @@ def test_rejects_unknown_fastapi_request_format() -> None:
             format="xml",
             headers={},
         )
-    except AuthzExecutionError as exc:
-        assert "request format 'xml'" in str(exc)
-    else:
-        raise AssertionError("unsupported FastAPI request format should fail")
+
+
+def test_discovers_fastapi_routes() -> None:
+    result = FastAPIAdapter().discover_routes(build_app())
+    assert result.available
+    assert result.framework == "fastapi"
+    assert {(route.method, route.name, route.pattern) for route in result.routes} == {
+        ("GET", "booking-detail", "/bookings/{booking_id}"),
+        ("PATCH", "booking-update", "/bookings/{booking_id}"),
+        ("GET", "health", "/health"),
+    }

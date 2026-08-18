@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any, Protocol
 from urllib.parse import urlencode
 
+from pytest_authz_matrix.adapters.base import FrameworkAdapter
 from pytest_authz_matrix.adapters.registry import adapter_for
 from pytest_authz_matrix.exceptions import AuthzExecutionError
 from pytest_authz_matrix.models import CaseSpec
@@ -19,6 +20,9 @@ class CaseRecorder(Protocol):
 
     def record_case(self, spec: CaseSpec, *, passed: bool, actual_status: int | None) -> None:
         """Record the result of one case assertion."""
+
+    def register_framework(self, adapter: FrameworkAdapter, app: Any | None) -> None:
+        """Record the framework adapter observed while executing a case."""
 
 
 class AuthorizationCase:
@@ -100,6 +104,9 @@ class AuthorizationCase:
             request_headers.update(headers)
 
         adapter = adapter_for(client, app=self._app)
+        app = self._app if self._app is not None else adapter.extract_app(client)
+        if self._recorder is not None:
+            self._recorder.register_framework(adapter, app)
         return adapter.execute(
             client,
             method=self.spec.contract.method,

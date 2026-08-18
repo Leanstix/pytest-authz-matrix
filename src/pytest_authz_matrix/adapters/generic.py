@@ -54,5 +54,6 @@ class GenericAdapter:
     def discover_routes(self, app: Any | None) -> DiscoveryResult:
         return DiscoveryResult(
             False,
+            framework=self.name,
             reason="route discovery is unavailable for the generic client adapter",
         )
