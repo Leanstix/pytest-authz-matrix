@@ -6,6 +6,8 @@ from collections.abc import Mapping
 from typing import Any, Protocol
 from urllib.parse import urlencode
 
+from pytest_authz_matrix.adapters.base import FrameworkAdapter
+from pytest_authz_matrix.adapters.registry import adapter_for
 from pytest_authz_matrix.exceptions import AuthzExecutionError
 from pytest_authz_matrix.models import CaseSpec
 from pytest_authz_matrix.templating import related_object, render_path
@@ -19,6 +21,9 @@ class CaseRecorder(Protocol):
     def record_case(self, spec: CaseSpec, *, passed: bool, actual_status: int | None) -> None:
         """Record the result of one case assertion."""
 
+    def register_framework(self, adapter: FrameworkAdapter, app: Any | None) -> None:
+        """Record the framework adapter observed while executing a case."""
+
 
 class AuthorizationCase:
     """A generated actor/resource test case.
@@ -28,10 +33,17 @@ class AuthorizationCase:
     inspect the response or application state between those operations.
     """
 
-    def __init__(self, request: Any, spec: CaseSpec, recorder: CaseRecorder | None = None) -> None:
+    def __init__(
+        self,
+        request: Any,
+        spec: CaseSpec,
+        recorder: CaseRecorder | None = None,
+        app: Any | None = None,
+    ) -> None:
         self._request = request
         self.spec = spec
         self._recorder = recorder
+        self._app = app
         self._resource_object: Any = _UNSET
 
     @property
@@ -78,7 +90,7 @@ class AuthorizationCase:
         query: Any = _UNSET,
         headers: Mapping[str, str] | None = None,
     ) -> Any:
-        """Send this case through the actor's configured API client fixture."""
+        """Send this case through the actor's configured framework adapter."""
 
         client = self._fixture(self.spec.actor.client_fixture)
         request_spec = self.spec.contract.request
@@ -91,23 +103,17 @@ class AuthorizationCase:
         if headers:
             request_headers.update(headers)
 
-        kwargs: dict[str, Any] = {}
-        if request_data is not None:
-            kwargs["data"] = request_data
-            if request_spec.format is not None:
-                kwargs["format"] = request_spec.format
-        if request_headers:
-            kwargs["headers"] = request_headers
-
-        method = self.spec.contract.method.lower()
-        sender = getattr(client, method, None)
-        if callable(sender):
-            return sender(path, **kwargs)
-        generic = getattr(client, "generic", None)
-        if callable(generic):
-            return generic(self.spec.contract.method, path, **kwargs)
-        raise AuthzExecutionError(
-            f"Fixture {self.spec.actor.client_fixture!r} has neither {method}() nor generic()"
+        adapter = adapter_for(client, app=self._app)
+        app = self._app if self._app is not None else adapter.extract_app(client)
+        if self._recorder is not None:
+            self._recorder.register_framework(adapter, app)
+        return adapter.execute(
+            client,
+            method=self.spec.contract.method,
+            path=path,
+            data=request_data,
+            format=request_spec.format,
+            headers=request_headers,
         )
 
     def assert_response(self, response: Any) -> Any:

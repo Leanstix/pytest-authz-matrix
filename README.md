@@ -6,28 +6,42 @@
 
 Authorization contract testing for Python web APIs.
 
-`pytest-authz-matrix` expands one pytest test into the complete actor × resource-relationship
-matrix for an endpoint. For Django REST Framework projects, it can also inventory API routes
-and report which HTTP method/route pairs do not have an authorization contract.
+`pytest-authz-matrix` expands one pytest test into the complete actor x resource-relationship
+matrix for an endpoint. It has first-class adapters for **Django REST Framework** and **FastAPI**,
+with a generic fallback for custom test clients.
 
-It is built for the bugs that ordinary authentication tests miss:
+It is built for authorization bugs ordinary authentication tests miss:
 
 - a user retrieves another user's object by changing an ID;
 - a tenant administrator reaches an object belonging to another tenant;
 - a list endpoint leaks foreign rows while its detail endpoint is protected;
-- an endpoint returns `403` when policy requires concealing the object's existence with `404`;
-- a new DRF route ships without any ownership or cross-tenant test.
+- an endpoint returns `403` when policy requires concealing existence with `404`;
+- a new API route ships without a corresponding authorization contract.
 
-> **Status:** `0.1.0` is an alpha focused on explicit DRF authorization contracts. The plugin
-> discovers untested routes; it deliberately does not guess your business authorization policy.
+> **Status:** `0.2.0` is alpha. Contracts remain explicit: the plugin discovers routes and tests
+> declared authorization policy, but it does not guess arbitrary business authorization rules.
 
-## Quick start
+## Installation
 
-Install the plugin with its DRF integration:
+Core only:
+
+```bash
+pip install pytest-authz-matrix
+```
+
+Django REST Framework:
 
 ```bash
 pip install "pytest-authz-matrix[django]"
 ```
+
+FastAPI:
+
+```bash
+pip install "pytest-authz-matrix[fastapi]"
+```
+
+## Quick start
 
 Create `authz-matrix.yml` in the pytest root:
 
@@ -36,41 +50,49 @@ version: 1
 
 actors:
   owner: owner_client
-  same_tenant_user: same_tenant_client
-  foreign_tenant_user: foreign_tenant_client
+  outsider: outsider_client
   anonymous: anonymous_client
 
 resources:
   booking:
     fixture: booking_matrix
-    lookup: pk
+    lookup: id
 
 contracts:
   booking.retrieve:
     method: GET
-    path: /api/bookings/{resource}/
+    path: /api/bookings/{resource}
     route_name: booking-detail
     resource: booking
     matrix:
       owner:
         owned: allow
-        same_tenant: conceal
-        foreign_tenant: conceal
-      same_tenant_user:
+        foreign: conceal
+      outsider:
         owned: conceal
-        same_tenant: allow
-        foreign_tenant: conceal
-      foreign_tenant_user:
-        owned: conceal
-        same_tenant: conceal
-        foreign_tenant: allow
+        foreign: conceal
       anonymous:
         owned: unauthenticated
-        same_tenant: unauthenticated
-        foreign_tenant: unauthenticated
+        foreign: unauthenticated
 ```
 
-The actor fixtures return the API clients that already know how your project authenticates:
+Bind a pytest test to that contract:
+
+```python
+import pytest
+
+
+@pytest.mark.authz_contract("booking.retrieve")
+def test_booking_retrieve_authorization(authz_case):
+    authz_case.run()
+```
+
+That single test expands into every configured actor/relationship combination with readable case
+IDs.
+
+## Django REST Framework
+
+Actor fixtures can return DRF `APIClient` instances. Authentication remains application-owned:
 
 ```python
 import pytest
@@ -82,107 +104,84 @@ def owner_client(owner):
     client = APIClient()
     client.force_authenticate(owner)
     return client
-
-
-@pytest.fixture
-def same_tenant_client(same_tenant_user):
-    client = APIClient()
-    client.force_authenticate(same_tenant_user)
-    return client
-
-
-@pytest.fixture
-def foreign_tenant_client(foreign_tenant_user):
-    client = APIClient()
-    client.force_authenticate(foreign_tenant_user)
-    return client
-
-
-@pytest.fixture
-def anonymous_client():
-    return APIClient()
 ```
 
-The resource fixture maps the relationship names in YAML to real model instances:
+The DRF adapter preserves the existing `data=...`, `format=...`, and Django URL-resolver behavior.
 
-```python
-@pytest.fixture
-def booking_matrix(owner_booking, same_tenant_booking, foreign_tenant_booking):
-    return {
-        "owned": owner_booking,
-        "same_tenant": same_tenant_booking,
-        "foreign_tenant": foreign_tenant_booking,
-    }
-```
+## FastAPI
 
-Finally, bind a test to the contract:
+Actor fixtures return FastAPI/Starlette `TestClient` instances:
 
 ```python
 import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
 
 
-@pytest.mark.authz_contract("booking.retrieve")
-def test_booking_retrieve_authorization(authz_case):
-    authz_case.run()
+@pytest.fixture
+def owner_client(owner_token):
+    return TestClient(
+        app,
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
 ```
 
-That single function becomes 12 independent pytest cases with readable IDs such as:
+The framework is detected automatically. For a normal `TestClient`, no `framework:` key and no app
+configuration are required. If a custom client wrapper hides the underlying application, override
+the optional fixture:
 
-```text
-booking.retrieve[owner-owned-allow]
-booking.retrieve[owner-foreign_tenant-conceal]
-booking.retrieve[anonymous-owned-unauthenticated]
+```python
+@pytest.fixture
+def authz_app():
+    return app
 ```
+
+With `format: json` (the default), the FastAPI adapter sends the body through the client's `json=`
+parameter. `format: form`, `format: data`, and `format: null` use form/data semantics.
+
+See [`docs/fastapi.md`](docs/fastapi.md) and [`examples/fastapi`](examples/fastapi).
+
+## Resource relationships
+
+A resource fixture maps relationship names in YAML to real objects or mappings:
+
+```python
+@pytest.fixture
+def booking_matrix(owner_booking, foreign_booking):
+    return {
+        "owned": owner_booking,
+        "foreign": foreign_booking,
+    }
+```
+
+`lookup` defaults to `pk`. Use `id`, `uuid`, `public_id`, or a nested attribute/key path when your
+API uses another identifier.
 
 ## Outcomes
 
-The built-in outcomes are HTTP status contracts:
+Built-in outcomes are HTTP status contracts:
 
 | Outcome | Default status | Meaning |
 |---|---:|---|
-| `allow` | `200` | The actor may perform the operation. |
-| `deny` | `403` | The actor is authenticated but forbidden. |
-| `conceal` | `404` | The resource's existence must not be disclosed. |
+| `allow` | `200` | Actor may perform the operation. |
+| `deny` | `403` | Authenticated but forbidden. |
+| `conceal` | `404` | Resource existence must not be disclosed. |
 | `unauthenticated` | `401` | Authentication is required. |
 
-Override defaults globally when an endpoint legitimately returns another success status:
-
-```yaml
-outcomes:
-  allow: [200, 201, 204]
-  deny: [403]
-  conceal: [404]
-  unauthenticated: [401]
-```
-
-Or override one matrix cell:
-
-```yaml
-matrix:
-  owner:
-    owned:
-      outcome: allow
-      statuses: [200, 204]
-```
-
-An integer or list is also accepted for a status-only expectation:
-
-```yaml
-matrix:
-  owner:
-    owned: [200, 206]
-```
+Override defaults globally or override a single matrix cell when an endpoint legitimately returns
+another success/error status.
 
 ## Mutating endpoints
 
-Request bodies and query strings can come from fixtures:
+Request bodies, query strings, and headers can come from fixtures:
 
 ```yaml
 contracts:
   booking.update:
     method: PATCH
-    path: /api/bookings/{resource}/
-    route_name: booking-detail
+    path: /api/bookings/{resource}
+    route_name: booking-update
     resource: booking
     request:
       data_fixture: booking_update_payload
@@ -193,102 +192,73 @@ contracts:
     matrix:
       owner:
         owned: allow
-        foreign_tenant: conceal
+        foreign: conceal
 ```
 
-For state or side-effect assertions, split execution from the status assertion:
+For side-effect assertions, split execution from the response assertion:
 
 ```python
-@pytest.mark.authz_contract("booking.update")
-def test_booking_update_authorization(authz_case):
-    original_status = authz_case.resource.status
-
-    response = authz_case.execute()
-
-    authz_case.resource.refresh_from_db()
-    if authz_case.outcome != "allow":
-        assert authz_case.resource.status == original_status
-    authz_case.assert_response(response)
+response = authz_case.execute()
+# inspect state here
+authz_case.assert_response(response)
 ```
 
-`authz_case.execute()` also accepts per-test `data`, `query`, and `headers` overrides.
+`execute()` also accepts per-test `data`, `query`, and `headers` overrides.
 
 ## Route coverage
 
-Add `route_name` to contracts whenever possible. The plugin matches the contract's HTTP method
-and Django URL name against DRF's URL resolver. Without a route name, it falls back to normalized
-path matching.
+Enable coverage reporting:
 
 ```bash
 pytest --authz-report
 ```
 
-Example output:
+The reporter records which framework adapter actually executed the authorization cases and then
+compares declared contracts against that framework's route inventory.
+
+Example:
 
 ```text
-============================= authorization matrix =============================
 authorization cases: 12/12 asserted, 12 passed, 0 failed
 authorization contracts: 1/1 exercised
-DRF route coverage: 9/11 (81.8%)
-  missing: PATCH children-detail
-  missing: POST booking-refund
+FastAPI route coverage: 8/10 (80.0%)
+  missing: DELETE delete-booking
+  missing: GET health
 ```
 
-Fail CI when route coverage drops below a threshold:
+Write a machine-readable report:
 
 ```bash
-pytest --authz-report --authz-fail-under=85
+pytest --authz-report-json=authz-report.json
 ```
 
-Write machine-readable results:
+Report schema version 2 uses a framework-neutral `route_coverage` object containing the detected
+framework, totals, percentage, and uncovered routes.
+
+Fail CI below a route-contract threshold:
 
 ```bash
-pytest --authz-report-json=build/authz-report.json
+pytest --authz-fail-under=90
 ```
 
-Discovery is best-effort and only runs when Django is configured in the pytest session. A plain
-Python or non-Django test suite can still use explicit matrices with any client fixture exposing
-HTTP method functions such as `.get()` or `.patch()`.
+## Framework behavior
 
-## Path templates
+The authorization contract format is intentionally framework-neutral. Framework adapters are
+responsible for request execution and route inventory only:
 
-Given a resource fixture object, the following placeholders are available:
+- `django-rest-framework` - DRF/Django clients and URL resolver discovery;
+- `fastapi` - Starlette `TestClient` execution and FastAPI `APIRoute` discovery;
+- `generic` - method/generic client execution when no first-class adapter matches.
 
-| Placeholder | Resolution |
-|---|---|
-| `{resource}` | The resource field configured by `lookup` (`pk` by default). |
-| `{resource.uuid}` | Any mapping key or object attribute on the selected resource. |
-| `{params.estate}` | A static value from the contract's `params` mapping. |
+This keeps application models, authentication backends, tenancy systems, and business policy in
+project fixtures rather than importing them into the plugin.
 
-Values are URL-encoded before insertion. See [the full configuration reference](https://github.com/Leanstix/pytest-authz-matrix/blob/main/docs/configuration.md)
-for endpoint-only contracts, request options, and validation rules.
+## Configuration and design
 
-## What this version does not do
-
-- It does not infer who should own an object. Fixtures define that truth explicitly.
-- It does not prove that response bodies contain no foreign objects; add a list-response assertion.
-- It does not intercept emails, Celery tasks, or external API calls automatically.
-- It does not yet generate contracts from OpenAPI or support a first-class FastAPI adapter.
-- It does not replace database row-level-security tests or a security review.
-
-These boundaries are intentional. The first release makes authorization policy executable and
-shows what remains untested without claiming to solve authorization automatically.
-
-## Development
-
-```bash
-python -m venv .venv
-. .venv/bin/activate
-pip install -e ".[dev]"
-pytest
-ruff check src tests
-mypy src
-python -m build
-```
-
-See [CONTRIBUTING.md](https://github.com/Leanstix/pytest-authz-matrix/blob/main/CONTRIBUTING.md)
-before opening a pull request. The architecture and planned extension points are documented in
-[docs/design.md](https://github.com/Leanstix/pytest-authz-matrix/blob/main/docs/design.md).
+- [`docs/configuration.md`](docs/configuration.md)
+- [`docs/design.md`](docs/design.md)
+- [`docs/fastapi.md`](docs/fastapi.md)
+- [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## License
 

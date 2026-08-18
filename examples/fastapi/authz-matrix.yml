@@ -1,0 +1,47 @@
+version: 1
+
+actors:
+  owner: owner_client
+  outsider: outsider_client
+  anonymous: anonymous_client
+
+resources:
+  booking:
+    fixture: booking_matrix
+    lookup: id
+
+contracts:
+  booking.retrieve:
+    method: GET
+    path: /bookings/{resource}
+    route_name: booking-detail
+    resource: booking
+    matrix:
+      owner:
+        owned: allow
+        foreign: conceal
+      outsider:
+        owned: conceal
+        foreign: conceal
+      anonymous:
+        owned: conceal
+        foreign: conceal
+
+  booking.update:
+    method: PATCH
+    path: /bookings/{resource}
+    route_name: booking-update
+    resource: booking
+    request:
+      data_fixture: booking_update_payload
+      format: json
+    matrix:
+      owner:
+        owned: allow
+        foreign: conceal
+      outsider:
+        owned: conceal
+        foreign: conceal
+      anonymous:
+        owned: conceal
+        foreign: conceal

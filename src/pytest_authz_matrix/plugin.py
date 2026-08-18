@@ -29,7 +29,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     group.addoption(
         "--authz-report",
         action="store_true",
-        help="print authorization case and DRF route coverage",
+        help="print authorization case and API route coverage",
     )
     group.addoption(
         "--authz-report-json",
@@ -42,7 +42,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store",
         type=_percentage,
         metavar="PERCENT",
-        help="fail when discovered DRF route coverage is below this percentage",
+        help="fail when discovered API route coverage is below this percentage",
     )
 
 
@@ -131,10 +131,22 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 
 @pytest.fixture
-def authz_case(request: pytest.FixtureRequest) -> AuthorizationCase:
+def authz_app() -> Any | None:
+    """Optional explicit application fixture used when a client wrapper hides the app."""
+
+    return None
+
+
+@pytest.fixture
+def authz_case(request: pytest.FixtureRequest, authz_app: Any | None) -> AuthorizationCase:
     """Return one generated authorization case for a marked test."""
 
-    return AuthorizationCase(request, request.param, recorder=_get_recorder(request.config))
+    return AuthorizationCase(
+        request,
+        request.param,
+        recorder=_get_recorder(request.config),
+        app=authz_app,
+    )
 
 
 def _get_config(pytest_config: pytest.Config) -> MatrixConfig:
@@ -151,8 +163,7 @@ def _get_config(pytest_config: pytest.Config) -> MatrixConfig:
     return loaded
 
 
-def _get_recorder(pytest_config: pytest.Config) -> Any | None:
-    # Reporting is installed lazily so using the core plugin has near-zero overhead.
+def _get_recorder(pytest_config: pytest.Config) -> AuthorizationReporter | None:
     return getattr(pytest_config, "_authz_matrix_reporter", None)
 
 

@@ -8,11 +8,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from pytest_authz_matrix.adapters.base import FrameworkAdapter
 from pytest_authz_matrix.discovery import (
     DiscoveredRoute,
     DiscoveryResult,
     covered_routes,
-    discover_drf_routes,
 )
 from pytest_authz_matrix.models import CaseSpec, MatrixConfig
 
@@ -38,6 +38,9 @@ class AuthorizationReporter:
         self.covered: set[DiscoveredRoute] = set()
         self.uncovered: set[DiscoveredRoute] = set()
         self.error: str | None = None
+        self._adapter: FrameworkAdapter | None = None
+        self._app: Any | None = None
+        self._framework_conflict: str | None = None
 
     def record_case(self, spec: CaseSpec, *, passed: bool, actual_status: int | None) -> None:
         self.results[spec.id] = CaseResult(
@@ -48,9 +51,38 @@ class AuthorizationReporter:
             expected_statuses=spec.expectation.statuses,
         )
 
+    def register_framework(self, adapter: FrameworkAdapter, app: Any | None) -> None:
+        """Remember the most specific framework observed during case execution."""
+
+        if self._adapter is None:
+            self._adapter = adapter
+            self._app = app
+            return
+        if self._adapter.name == adapter.name:
+            if self._app is None and app is not None:
+                self._app = app
+            return
+        if self._adapter.name == "generic" and adapter.name != "generic":
+            self._adapter = adapter
+            self._app = app
+            return
+        if adapter.name == "generic":
+            return
+        self._framework_conflict = (
+            f"multiple framework adapters detected: {self._adapter.name!r} and {adapter.name!r}"
+        )
+
     def finalize(self, config: MatrixConfig) -> None:
         self.config = config
-        self.discovery = discover_drf_routes()
+        if self._framework_conflict:
+            self.discovery = DiscoveryResult(False, reason=self._framework_conflict)
+        elif self._adapter is None:
+            self.discovery = DiscoveryResult(
+                False,
+                reason="no framework adapter was observed during authorization cases",
+            )
+        else:
+            self.discovery = self._adapter.discover_routes(self._app)
         self.covered, self.uncovered = covered_routes(self.discovery, config)
 
     @property
@@ -75,7 +107,7 @@ class AuthorizationReporter:
         route_coverage = self.route_coverage
         contracts_exercised = sorted({result.contract for result in self.results.values()})
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "summary": {
                 "configured_cases": self.total_cases,
@@ -95,7 +127,8 @@ class AuthorizationReporter:
                 }
                 for result in sorted(self.results.values(), key=lambda item: item.case_id)
             ],
-            "drf_routes": {
+            "route_coverage": {
+                "framework": self.discovery.framework,
                 "available": self.discovery.available,
                 "reason": self.discovery.reason,
                 "total": len(self.discovery.routes),
@@ -130,11 +163,12 @@ class AuthorizationReporter:
             ),
         ]
         coverage = self.route_coverage
+        label = _framework_label(self.discovery.framework)
         if coverage is None:
-            lines.append(f"DRF route coverage: unavailable ({self.discovery.reason})")
+            lines.append(f"{label} route coverage: unavailable ({self.discovery.reason})")
         else:
             lines.append(
-                "DRF route coverage: "
+                f"{label} route coverage: "
                 f"{len(self.covered)}/{len(self.discovery.routes)} ({coverage:.1f}%)"
             )
             for route in sorted(self.uncovered, key=lambda item: item.id)[:20]:
@@ -142,3 +176,12 @@ class AuthorizationReporter:
             if len(self.uncovered) > 20:
                 lines.append(f"  ... and {len(self.uncovered) - 20} more")
         return lines
+
+
+def _framework_label(framework: str | None) -> str:
+    if framework is None:
+        return "API"
+    return {
+        "fastapi": "FastAPI",
+        "django-rest-framework": "DRF",
+    }.get(framework, "API")
