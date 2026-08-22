@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any
 
@@ -105,15 +106,22 @@ def discover_drf_routes() -> DiscoveryResult:
 
 
 def covered_routes(
-    discovery: DiscoveryResult, config: MatrixConfig
+    discovery: DiscoveryResult,
+    config: MatrixConfig,
+    *,
+    contract_names: Collection[str] | None = None,
 ) -> tuple[set[DiscoveredRoute], set[DiscoveredRoute]]:
-    """Split discovered routes into covered and uncovered method-route pairs."""
+    """Split routes by contracts, optionally restricting coverage to completed contracts."""
 
     if not discovery.available:
         return set(), set()
     covered: set[DiscoveredRoute] = set()
     uncovered: set[DiscoveredRoute] = set()
-    contracts = tuple(config.contracts.values())
+    contracts = tuple(
+        contract
+        for name, contract in config.contracts.items()
+        if contract_names is None or name in contract_names
+    )
     for route in discovery.routes:
         target = covered if any(_matches(route, contract) for contract in contracts) else uncovered
         target.add(route)

@@ -16,6 +16,9 @@ _UNSET = object()
 class CaseRecorder(Protocol):
     """Reporting hook implemented by the pytest runtime."""
 
+    def record_execution(self, spec: CaseSpec) -> None:
+        """Record that one generated case completed its configured request."""
+
     def record_case(self, spec: CaseSpec, *, passed: bool, actual_status: int | None) -> None:
         """Record the result of one case assertion."""
 
@@ -102,13 +105,18 @@ class AuthorizationCase:
         method = self.spec.contract.method.lower()
         sender = getattr(client, method, None)
         if callable(sender):
-            return sender(path, **kwargs)
-        generic = getattr(client, "generic", None)
-        if callable(generic):
-            return generic(self.spec.contract.method, path, **kwargs)
-        raise AuthzExecutionError(
-            f"Fixture {self.spec.actor.client_fixture!r} has neither {method}() nor generic()"
-        )
+            response = sender(path, **kwargs)
+        else:
+            generic = getattr(client, "generic", None)
+            if not callable(generic):
+                raise AuthzExecutionError(
+                    f"Fixture {self.spec.actor.client_fixture!r} has neither "
+                    f"{method}() nor generic()"
+                )
+            response = generic(self.spec.contract.method, path, **kwargs)
+        if self._recorder is not None:
+            self._recorder.record_execution(self.spec)
+        return response
 
     def assert_response(self, response: Any) -> Any:
         """Assert the configured status outcome and return the response unchanged."""

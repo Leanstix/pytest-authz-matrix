@@ -32,12 +32,16 @@ class AuthorizationReporter:
     """Session-scoped result and route coverage collector."""
 
     def __init__(self) -> None:
+        self.executed: set[str] = set()
         self.results: dict[str, CaseResult] = {}
         self.config: MatrixConfig | None = None
         self.discovery = DiscoveryResult(False, reason="report has not been finalized")
         self.covered: set[DiscoveredRoute] = set()
         self.uncovered: set[DiscoveredRoute] = set()
         self.error: str | None = None
+
+    def record_execution(self, spec: CaseSpec) -> None:
+        self.executed.add(spec.id)
 
     def record_case(self, spec: CaseSpec, *, passed: bool, actual_status: int | None) -> None:
         self.results[spec.id] = CaseResult(
@@ -51,16 +55,78 @@ class AuthorizationReporter:
     def finalize(self, config: MatrixConfig) -> None:
         self.config = config
         self.discovery = discover_drf_routes()
-        self.covered, self.uncovered = covered_routes(self.discovery, config)
+        self.covered, self.uncovered = covered_routes(
+            self.discovery,
+            config,
+            contract_names=self.complete_contracts,
+        )
+
+    @property
+    def configured_cases(self) -> dict[str, str]:
+        """Map every configured case ID to its contract name."""
+
+        if self.config is None:
+            return {}
+        cases: dict[str, str] = {}
+        for contract in self.config.contracts.values():
+            for actor_name, relationships in contract.matrix.items():
+                for relationship, expectation in relationships.items():
+                    relationship_name = relationship or "endpoint"
+                    case_id = (
+                        f"{contract.name}[{actor_name}-{relationship_name}-"
+                        f"{expectation.outcome}]"
+                    )
+                    cases[case_id] = contract.name
+        return cases
 
     @property
     def total_cases(self) -> int:
+        return len(self.configured_cases)
+
+    @property
+    def asserted(self) -> set[str]:
+        return set(self.results)
+
+    @property
+    def completed_cases(self) -> set[str]:
+        return self.executed & self.asserted
+
+    @property
+    def missing_execution(self) -> set[str]:
+        return set(self.configured_cases) - self.executed
+
+    @property
+    def missing_assertion(self) -> set[str]:
+        return self.executed - self.asserted
+
+    @property
+    def asserted_without_execution(self) -> set[str]:
+        return self.asserted - self.executed
+
+    @property
+    def complete_contracts(self) -> set[str]:
+        configured = self.configured_cases
+        complete: set[str] = set()
+        for contract_name in set(configured.values()):
+            contract_cases = {
+                case_id for case_id, name in configured.items() if name == contract_name
+            }
+            if contract_cases and contract_cases <= self.completed_cases:
+                complete.add(contract_name)
+        return complete
+
+    @property
+    def incomplete_contracts(self) -> set[str]:
         if self.config is None:
-            return 0
-        return sum(
-            len(relationships)
-            for contract in self.config.contracts.values()
-            for relationships in contract.matrix.values()
+            return set()
+        return set(self.config.contracts) - self.complete_contracts
+
+    @property
+    def execution_complete(self) -> bool:
+        return not (
+            self.missing_execution
+            or self.missing_assertion
+            or self.asserted_without_execution
         )
 
     @property
@@ -73,17 +139,27 @@ class AuthorizationReporter:
     def as_dict(self) -> dict[str, Any]:
         passed = sum(result.passed for result in self.results.values())
         route_coverage = self.route_coverage
-        contracts_exercised = sorted({result.contract for result in self.results.values()})
+        contracts_exercised = {result.contract for result in self.results.values()}
         return {
             "schema_version": 1,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "summary": {
                 "configured_cases": self.total_cases,
+                "executed_cases": len(self.executed),
                 "asserted_cases": len(self.results),
+                "completed_cases": len(self.completed_cases),
                 "passed_cases": passed,
                 "failed_cases": len(self.results) - passed,
                 "configured_contracts": len(self.config.contracts) if self.config else 0,
                 "exercised_contracts": len(contracts_exercised),
+                "complete_contracts": len(self.complete_contracts),
+            },
+            "execution": {
+                "complete": self.execution_complete,
+                "missing_execution": sorted(self.missing_execution),
+                "missing_assertion": sorted(self.missing_assertion),
+                "asserted_without_execution": sorted(self.asserted_without_execution),
+                "incomplete_contracts": sorted(self.incomplete_contracts),
             },
             "cases": [
                 {
@@ -121,14 +197,23 @@ class AuthorizationReporter:
         lines = [
             (
                 "authorization cases: "
-                f"{summary['asserted_cases']}/{summary['configured_cases']} asserted, "
+                f"{summary['completed_cases']}/{summary['configured_cases']} complete, "
+                f"{summary['executed_cases']} executed, {summary['asserted_cases']} asserted, "
                 f"{summary['passed_cases']} passed, {summary['failed_cases']} failed"
             ),
             (
                 "authorization contracts: "
-                f"{summary['exercised_contracts']}/{summary['configured_contracts']} exercised"
+                f"{summary['complete_contracts']}/{summary['configured_contracts']} complete"
             ),
         ]
+        execution = self.as_dict()["execution"]
+        lines.extend(_incomplete_case_lines("not executed", execution["missing_execution"]))
+        lines.extend(_incomplete_case_lines("not asserted", execution["missing_assertion"]))
+        lines.extend(
+            _incomplete_case_lines(
+                "asserted without execution", execution["asserted_without_execution"]
+            )
+        )
         coverage = self.route_coverage
         if coverage is None:
             lines.append(f"DRF route coverage: unavailable ({self.discovery.reason})")
@@ -142,3 +227,10 @@ class AuthorizationReporter:
             if len(self.uncovered) > 20:
                 lines.append(f"  ... and {len(self.uncovered) - 20} more")
         return lines
+
+
+def _incomplete_case_lines(label: str, case_ids: list[str]) -> list[str]:
+    lines = [f"  {label}: {case_id}" for case_id in case_ids[:20]]
+    if len(case_ids) > 20:
+        lines.append(f"  ... and {len(case_ids) - 20} more {label} cases")
+    return lines

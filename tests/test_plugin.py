@@ -5,7 +5,7 @@ import json
 import pytest
 
 
-def make_project(pytester: pytest.Pytester) -> None:
+def make_project(pytester: pytest.Pytester, test_body: str | None = None) -> None:
     pytester.makeconftest(
         """
 import pytest
@@ -62,7 +62,8 @@ contracts:
         encoding="utf-8",
     )
     pytester.makepyfile(
-        """
+        test_body
+        or """
 import pytest
 
 @pytest.mark.authz_contract('booking.retrieve')
@@ -81,8 +82,8 @@ def test_expands_and_runs_every_matrix_case(pytester: pytest.Pytester) -> None:
     result.stdout.fnmatch_lines(
         [
             "*authorization matrix*",
-            "authorization cases: 4/4 asserted, 4 passed, 0 failed",
-            "authorization contracts: 1/1 exercised",
+            "authorization cases: 4/4 complete, 4 executed, 4 asserted, 4 passed, 0 failed",
+            "authorization contracts: 1/1 complete",
         ]
     )
 
@@ -95,8 +96,82 @@ def test_writes_json_report(pytester: pytest.Pytester) -> None:
     result.assert_outcomes(passed=4)
     report = json.loads((pytester.path / "report.json").read_text(encoding="utf-8"))
     assert report["summary"]["configured_cases"] == 4
+    assert report["summary"]["executed_cases"] == 4
+    assert report["summary"]["completed_cases"] == 4
     assert report["summary"]["passed_cases"] == 4
+    assert report["summary"]["complete_contracts"] == 1
+    assert report["execution"] == {
+        "complete": True,
+        "missing_execution": [],
+        "missing_assertion": [],
+        "asserted_without_execution": [],
+        "incomplete_contracts": [],
+    }
     assert len(report["cases"]) == 4
+
+
+def test_require_complete_rejects_executed_but_unasserted_cases(
+    pytester: pytest.Pytester,
+) -> None:
+    make_project(
+        pytester,
+        """
+import pytest
+
+@pytest.mark.authz_contract('booking.retrieve')
+def test_booking_authorization(authz_case):
+    authz_case.execute()
+""",
+    )
+
+    result = pytester.runpytest("-q", "--authz-require-complete")
+
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+    result.assert_outcomes(passed=4)
+    result.stdout.fnmatch_lines(
+        [
+            "authorization cases: 0/4 complete, 4 executed, 0 asserted, 0 passed, 0 failed",
+            "authorization contracts: 0/1 complete",
+            "  not asserted: booking.retrieve[outsider-foreign-conceal]",
+            "  not asserted: booking.retrieve[outsider-owned-conceal]",
+            "  not asserted: booking.retrieve[owner-foreign-conceal]",
+            "  not asserted: booking.retrieve[owner-owned-allow]",
+        ]
+    )
+
+
+def test_require_complete_rejects_assertions_without_case_execution(
+    pytester: pytest.Pytester,
+) -> None:
+    make_project(
+        pytester,
+        """
+import pytest
+
+class Response:
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+@pytest.mark.authz_contract('booking.retrieve')
+def test_booking_authorization(authz_case):
+    authz_case.assert_response(Response(authz_case.spec.expectation.statuses[0]))
+""",
+    )
+
+    result = pytester.runpytest("-q", "--authz-require-complete")
+
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+    result.assert_outcomes(passed=4)
+    result.stdout.fnmatch_lines(
+        [
+            "authorization cases: 0/4 complete, 0 executed, 4 asserted, 4 passed, 0 failed",
+            "authorization contracts: 0/1 complete",
+            "  asserted without execution: booking.retrieve[outsider-foreign-conceal]",
+            "  asserted without execution: booking.retrieve[outsider-owned-conceal]",
+            "  asserted without execution: booking.retrieve[owner-foreign-conceal]",
+            "  asserted without execution: booking.retrieve[owner-owned-allow]",
+        ]
+    )
 
 
 def test_requires_contract_marker(pytester: pytest.Pytester) -> None:
@@ -168,6 +243,12 @@ contracts:
     route_name: booking-list
     matrix:
       owner: allow
+  health.retrieve:
+    method: GET
+    path: /health/
+    route_name: health-check
+    matrix:
+      owner: allow
 """,
         encoding="utf-8",
     )
@@ -187,6 +268,9 @@ def test_booking_list_authorization(authz_case):
     result.assert_outcomes(passed=1)
     result.stdout.fnmatch_lines(
         [
+            "authorization cases: 1/2 complete, 1 executed, 1 asserted, 1 passed, 0 failed",
+            "authorization contracts: 1/2 complete",
+            "  not executed: health.retrieve[owner-endpoint-allow]",
             "DRF route coverage: 1/2 (50.0%)",
             "  missing: GET health-check",
         ]
