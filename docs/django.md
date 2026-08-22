@@ -15,9 +15,19 @@ The DRF route inventory understands:
 - nested Django URL namespaces and fully qualified or short route names; and
 - path converters, including UUID converters, and router-generated regular-expression paths.
 
+DRF-generated content-negotiation suffix aliases are collapsed into their canonical routes. A
+real application parameter named `format` remains discoverable. ViewSet actions disabled through
+`http_method_names` are not inventoried, and duplicate route names require both the configured
+name and normalized path to match. Unnamed routes continue to match contracts by normalized path.
+
 Coverage is tracked for each application HTTP method and route pair. Django's automatic `HEAD`
 and `OPTIONS` handlers are excluded because they do not represent separately implemented
 authorization operations.
+
+The API root created by `DefaultRouter` is a real reachable endpoint and is included by default.
+Applications that intentionally leave it outside their authorization matrix must declare a
+reasoned `coverage.exclude` entry. Exclusions are never inferred from names such as `health` or
+`schema`.
 
 Coverage is also execution-backed. A route is covered only when every configured actor and
 relationship case in a matching contract both completes its request and asserts the response.

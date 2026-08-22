@@ -267,6 +267,21 @@ pytest --authz-require-complete
 The terminal and JSON reports distinguish cases that were never executed, executed without an
 assertion, and asserted without their configured request.
 
+Deliberately public or generated endpoints can be removed from the denominator with an auditable
+exclusion:
+
+```yaml
+coverage:
+  exclude:
+    - method: GET
+      route_name: api-root
+      reason: Generated router index has no object policy
+```
+
+Every exclusion requires a reason and appears in terminal and JSON reports. See the
+[configuration reference](docs/configuration.md#route-coverage-exclusions) for name, path, and
+method matching rules.
+
 Write machine-readable results:
 
 ```bash

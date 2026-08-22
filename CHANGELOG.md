@@ -22,6 +22,8 @@ the public API leaves alpha.
 - A migrated pytest-django integration project covering ORM-backed `ModelViewSet` actions,
   serializers, tenant-filtered querysets, object permissions, UUID lookups, transactions, and
   persisted create, update, partial-update, and delete behavior.
+- Validated method/name/path route exclusions with mandatory audit reasons and terminal/JSON
+  reporting.
 
 ### Changed
 
@@ -38,6 +40,11 @@ the public API leaves alpha.
   coverage, preventing uncollected authorization tests from producing a false-green result.
 - The `django` extra and compatibility jobs now include pytest-django 4.x so the declared Django
   support surface is exercised through real database fixtures.
+- DRF discovery now distinguishes generated format-suffix aliases from real `format` parameters,
+  respects disabled ViewSet HTTP methods, requires paths to disambiguate duplicate route names,
+  and preserves path matching for unnamed routes.
+- Excluded routes are removed from the coverage denominator while remaining visible with their
+  declared reasons. `DefaultRouter` API roots remain included unless explicitly excluded.
 
 ## [0.1.0] - 2026-08-15
 
