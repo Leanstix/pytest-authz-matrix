@@ -15,7 +15,7 @@ authors = [
 ]
 keywords = ["pytest", "authorization", "django", "drf", "security", "multi-tenant"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Framework :: Pytest",
   "Framework :: Django",
   "Programming Language :: Python :: 3",
