@@ -38,6 +38,9 @@ django = [
   "djangorestframework>=3.15.2,<3.19",
   "pytest-django>=4.8,<5",
 ]
+jwt = [
+  "djangorestframework-simplejwt>=5.5,<6",
+]
 xdist = [
   "pytest-xdist>=3.6,<4",
 ]
@@ -45,6 +48,7 @@ dev = [
   "build>=1.2",
   "Django>=4.2,<6.2",
   "djangorestframework>=3.15.2,<3.19",
+  "djangorestframework-simplejwt>=5.5,<6",
   "mypy>=1.10",
   "pytest-cov>=5",
   "pytest-django>=4.8,<5",

@@ -31,6 +31,12 @@ the public API leaves alpha.
 - Request/response boundary coverage for real file uploads, custom parser/renderer media types,
   header override precedence, redirects and trailing slashes, empty and opaque bodies, DRF
   exceptions, and async Django views.
+- A `jwt` extra and real SimpleJWT integration coverage for valid access tokens, expired and
+  malformed tokens, refresh-token misuse, authentication-class ordering, and authentication
+  challenges across every declared Django/DRF compatibility job.
+- Release-closure coverage for response content negotiation, malformed and unsupported request
+  media, custom exception handlers, throttling, streaming/file responses, secure proxy state,
+  host headers, and secure cookie attributes.
 
 ### Changed
 
@@ -55,6 +61,11 @@ the public API leaves alpha.
 - Parallel case results are deduplicated across workers, with failures preserved when duplicate
   executions disagree. Partial worker allocations no longer create false incomplete reports or
   race on the JSON output path.
+- Explicit request headers now replace configured headers case-insensitively, preventing duplicate
+  logical HTTP headers with different casing.
+- Awaitable client responses now raise an actionable `AuthzExecutionError`; async Django views
+  remain supported through Django's synchronous `Client` adapter, while `AsyncClient` is explicitly
+  outside the synchronous 0.1.1 API.
 
 ## [0.1.0] - 2026-08-15
 

@@ -34,6 +34,14 @@ Parallel reporting is available through a separate extra:
 pytest-xdist>=3.6,<4
 ```
 
+The optional tested SimpleJWT integration is:
+
+```text
+djangorestframework-simplejwt>=5.5,<6
+```
+
+Install it alongside the Django extra with `pytest-authz-matrix[django,jwt]`.
+
 Pip will select a mutually compatible Django/DRF pair. For example, DRF 3.18 requires Django 5.2
 or newer, so an environment pinned to Django 5.0 resolves to the latest compatible DRF 3.17
 release.
@@ -54,11 +62,15 @@ explicit green CI job.
 Every compatibility job also installs pytest-django 4.x and runs the real migrated ORM and
 `ModelViewSet` integration project, not only client and route-discovery unit tests.
 It also installs pytest-xdist 3.x and runs a two-worker strict terminal/JSON reporting project.
+SimpleJWT 5.5.x is installed in every compatibility job so JWT behavior is verified against the
+same Django and DRF release boundaries rather than only against the newest environment.
 
 The complete suite includes executable DRF applications. It covers router-registered ViewSets,
 standard and custom actions, nested namespaces, APIViews, function views, primary HTTP methods,
 JSON and multipart request formats, and authenticated and anonymous `APIClient` behavior. It also
 verifies real session/CSRF and token authentication, cookie/logout state, uploaded files, custom
 media types, header precedence, redirect and exception responses, opaque bodies, async Django
-views, plain Django `Client` encoding, and generic custom-client fallback. See
+views through the synchronous client, content-negotiation failures, custom exception handlers,
+throttling, streaming/file responses, secure proxy and host state, plain Django `Client` encoding,
+and generic custom-client fallback. See
 [Django and DRF integration](django.md) for the precise behavior.
