@@ -34,6 +34,10 @@ Python and Django REST Framework boundaries. Django 4.2, 5.0, and 5.1 are retain
 compatibility targets even though upstream security support has ended. See the complete
 [`Django compatibility matrix`](docs/compatibility.md).
 
+The integration suite exercises real router-registered ViewSets, custom actions, namespaces,
+request formats, primary HTTP methods, and authenticated DRF and plain Django clients. See
+[`Django and DRF integration`](docs/django.md) for the production-tested behavior.
+
 Create `authz-matrix.yml` in the pytest root:
 
 ```yaml
@@ -292,7 +296,8 @@ python -m build
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. The architecture and planned
-extension points are documented in [docs/design.md](docs/design.md).
+extension points are documented in [docs/design.md](docs/design.md). Runtime details for Django
+and DRF are documented in [docs/django.md](docs/django.md).
 
 ## License
 

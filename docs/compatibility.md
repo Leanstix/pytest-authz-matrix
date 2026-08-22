@@ -43,3 +43,9 @@ CI uses two complementary matrices:
 Every compatibility job prints and verifies the resolved Django, DRF, and Python versions before
 running the complete test suite. A version combination is not added to this table until it has an
 explicit green CI job.
+
+The complete suite includes executable DRF applications. It covers router-registered ViewSets,
+standard and custom actions, nested namespaces, APIViews, function views, primary HTTP methods,
+JSON and multipart request formats, and authenticated and anonymous `APIClient` behavior. It also
+verifies plain Django `Client` encoding and generic custom-client fallback. See
+[Django and DRF integration](django.md) for the precise behavior.

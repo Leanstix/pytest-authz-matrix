@@ -107,11 +107,16 @@ request:
 
 - `data_fixture` is passed as the client's `data` argument.
 - `query_fixture` may return a query-string, mapping, or sequence accepted by `urlencode`.
-- `format` is passed when request data exists. Set it to `null` for a non-DRF client.
+- With DRF's `APIClient`, `format` is passed through to DRF when request data exists.
+- With Django's `Client`, `json` and `multipart` are translated to Django-native request encoding;
+  `null` leaves encoding to Django. Other format values raise `AuthzExecutionError`.
+- A custom non-Django client receives the configured `format` keyword unchanged.
 - `headers` is passed as the client's `headers` argument.
 
 Actor-specific authentication, organization headers, and host selection should normally remain in
 the actor's client fixture.
+
+See [Django and DRF integration](django.md) for the tested route, request, and client semantics.
 
 ## Static path parameters
 
@@ -137,4 +142,3 @@ owned:
 ```
 
 The expanded form may use singular `status` instead of `statuses`.
-

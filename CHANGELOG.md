@@ -11,6 +11,12 @@ the public API leaves alpha.
   legacy compatibility for Django 5.0.
 - Pinned CI boundary jobs for every declared Django release line.
 - Clean-install smoke tests for both wheel and source distribution artifacts.
+- Executable DRF integration coverage for router-registered ViewSets, standard and custom actions,
+  nested namespaces, APIViews, function views, route-name matching, and route coverage reporting.
+- End-to-end request coverage for `GET`, `POST`, `PUT`, `PATCH`, and `DELETE` using JSON,
+  multipart, and default form payloads through real DRF clients.
+- Authenticated and anonymous `APIClient` coverage, including owner, concealment, denial,
+  cross-tenant, client-default header, and custom-action behavior.
 
 ### Changed
 
@@ -18,6 +24,9 @@ the public API leaves alpha.
   documented and tested compatibility surface.
 - Source distributions deliberately include the complete test suite, including
   `tests/conftest.py` and its `pytester` activation.
+- Plain Django `Client` requests translate `json` and `multipart` formats to Django-native
+  encoding, including multipart requests for non-POST methods. Unsupported Django formats now
+  raise an actionable `AuthzExecutionError`.
 
 ## [0.1.0] - 2026-08-15
 
