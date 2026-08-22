@@ -24,6 +24,8 @@ the public API leaves alpha.
   persisted create, update, partial-update, and delete behavior.
 - Validated method/name/path route exclusions with mandatory audit reasons and terminal/JSON
   reporting.
+- pytest-xdist worker aggregation with controller-only discovery, completeness gates, coverage
+  thresholds, terminal output, and JSON writing.
 
 ### Changed
 
@@ -45,6 +47,9 @@ the public API leaves alpha.
   and preserves path matching for unnamed routes.
 - Excluded routes are removed from the coverage denominator while remaining visible with their
   declared reasons. `DefaultRouter` API roots remain included unless explicitly excluded.
+- Parallel case results are deduplicated across workers, with failures preserved when duplicate
+  executions disagree. Partial worker allocations no longer create false incomplete reports or
+  race on the JSON output path.
 
 ## [0.1.0] - 2026-08-15
 

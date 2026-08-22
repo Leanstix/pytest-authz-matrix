@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,6 +54,42 @@ class AuthorizationReporter:
             actual_status=actual_status,
             expected_statuses=spec.expectation.statuses,
         )
+
+    def worker_state(self) -> dict[str, Any]:
+        """Return the serializable execution state produced by one xdist worker."""
+
+        return {
+            "executed": sorted(self.executed),
+            "results": [
+                {
+                    "case_id": result.case_id,
+                    "contract": result.contract,
+                    "passed": result.passed,
+                    "actual_status": result.actual_status,
+                    "expected_statuses": list(result.expected_statuses),
+                }
+                for result in sorted(self.results.values(), key=lambda item: item.case_id)
+            ],
+        }
+
+    def merge_worker_state(self, state: Mapping[str, Any]) -> None:
+        """Merge one xdist worker payload into the controller's reporter."""
+
+        executed = state.get("executed", [])
+        if isinstance(executed, list):
+            self.executed.update(item for item in executed if isinstance(item, str))
+
+        results = state.get("results", [])
+        if not isinstance(results, list):
+            return
+        for raw in results:
+            if not isinstance(raw, Mapping):
+                continue
+            result = _case_result_from_worker(raw)
+            if result is None:
+                continue
+            existing = self.results.get(result.case_id)
+            self.results[result.case_id] = _merge_case_results(existing, result)
 
     def finalize(self, config: MatrixConfig) -> None:
         self.config = config
@@ -259,3 +296,36 @@ def _incomplete_case_lines(label: str, case_ids: list[str]) -> list[str]:
     if len(case_ids) > 20:
         lines.append(f"  ... and {len(case_ids) - 20} more {label} cases")
     return lines
+
+
+def _case_result_from_worker(raw: Mapping[str, Any]) -> CaseResult | None:
+    case_id = raw.get("case_id")
+    contract = raw.get("contract")
+    passed = raw.get("passed")
+    actual_status = raw.get("actual_status")
+    expected_statuses = raw.get("expected_statuses")
+    if not isinstance(case_id, str) or not isinstance(contract, str):
+        return None
+    if not isinstance(passed, bool):
+        return None
+    if actual_status is not None and not isinstance(actual_status, int):
+        return None
+    if not isinstance(expected_statuses, list) or any(
+        not isinstance(status, int) for status in expected_statuses
+    ):
+        return None
+    return CaseResult(
+        case_id=case_id,
+        contract=contract,
+        passed=passed,
+        actual_status=actual_status,
+        expected_statuses=tuple(expected_statuses),
+    )
+
+
+def _merge_case_results(existing: CaseResult | None, incoming: CaseResult) -> CaseResult:
+    if existing is None:
+        return incoming
+    if existing.passed and not incoming.passed:
+        return incoming
+    return existing

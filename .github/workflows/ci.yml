@@ -113,6 +113,7 @@ jobs:
           "Django${{ matrix.django }}"
           "djangorestframework${{ matrix.drf }}"
           "pytest-django>=4.8,<5"
+          "pytest-xdist>=3.6,<4"
       - name: Verify resolved versions
         env:
           EXPECTED_DJANGO: ${{ matrix.django-label }}

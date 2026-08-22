@@ -15,6 +15,7 @@ from pytest_authz_matrix.models import CaseSpec, MatrixConfig
 from pytest_authz_matrix.reporting import AuthorizationReporter
 
 _CONFIG_ATTR = "_authz_matrix_contract_config"
+_XDIST_STATE_KEY = "pytest_authz_matrix"
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -64,6 +65,11 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     reporter = _get_recorder(session.config)
     if reporter is None:
         return
+    if _is_xdist_worker(session.config):
+        worker_output = getattr(session.config, "workeroutput", None)
+        if isinstance(worker_output, dict):
+            worker_output[_XDIST_STATE_KEY] = reporter.worker_state()
+        return
     try:
         reporter.finalize(_get_config(session.config))
         json_path = session.config.getoption("--authz-report-json")
@@ -85,6 +91,19 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     except (AuthzConfigurationError, pytest.UsageError, OSError) as exc:
         reporter.error = str(exc)
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_testnodedown(node: Any, error: Any) -> None:
+    """Merge completed xdist worker results into the controller reporter."""
+
+    reporter = _get_recorder(node.config)
+    worker_output = getattr(node, "workeroutput", None)
+    if reporter is None or not isinstance(worker_output, dict):
+        return
+    state = worker_output.get(_XDIST_STATE_KEY)
+    if isinstance(state, dict):
+        reporter.merge_worker_state(state)
 
 
 def pytest_terminal_summary(
@@ -181,6 +200,10 @@ def _terminal_reporting_requested(config: pytest.Config) -> bool:
         or config.getoption("--authz-fail-under") is not None
         or config.getoption("--authz-require-complete")
     )
+
+
+def _is_xdist_worker(config: pytest.Config) -> bool:
+    return hasattr(config, "workerinput")
 
 
 def _percentage(value: str) -> float:
