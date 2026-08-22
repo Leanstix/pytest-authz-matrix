@@ -112,6 +112,7 @@ jobs:
           python -m pip install -e .
           "Django${{ matrix.django }}"
           "djangorestframework${{ matrix.drf }}"
+          "djangorestframework-simplejwt>=5.5,<6"
           "pytest-django>=4.8,<5"
           "pytest-xdist>=3.6,<4"
       - name: Verify resolved versions
@@ -125,6 +126,7 @@ jobs:
 
           import django
           import rest_framework
+          import rest_framework_simplejwt
 
           django_version = django.get_version()
           drf_version = rest_framework.VERSION
@@ -132,6 +134,7 @@ jobs:
           print(f"Python {platform.python_version()}")
           print(f"Django {django_version}")
           print(f"Django REST Framework {drf_version}")
+          print(f"SimpleJWT {rest_framework_simplejwt.__version__}")
           assert django_version == expected_django or django_version.startswith(
               f"{expected_django}."
           )
