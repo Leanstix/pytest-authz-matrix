@@ -91,13 +91,13 @@ class AuthorizationCase:
         if headers:
             request_headers.update(headers)
 
-        kwargs: dict[str, Any] = {}
-        if request_data is not None:
-            kwargs["data"] = request_data
-            if request_spec.format is not None:
-                kwargs["format"] = request_spec.format
-        if request_headers:
-            kwargs["headers"] = request_headers
+        kwargs = _request_kwargs(
+            client,
+            method=self.spec.contract.method,
+            data=request_data,
+            format=request_spec.format,
+            headers=request_headers,
+        )
 
         method = self.spec.contract.method.lower()
         sender = getattr(client, method, None)
@@ -157,6 +157,69 @@ def _append_query(path: str, query: Any | None) -> str:
         return path
     separator = "&" if "?" in path else "?"
     return f"{path}{separator}{encoded}"
+
+
+def _request_kwargs(
+    client: Any,
+    *,
+    method: str,
+    data: Any | None,
+    format: str | None,
+    headers: dict[str, str],
+) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {}
+    if data is not None:
+        kwargs["data"] = data
+        if _is_drf_client(client):
+            if format is not None:
+                kwargs["format"] = format
+        elif _is_django_client(client):
+            django_data, content_type = _django_request_data(method, data, format)
+            kwargs["data"] = django_data
+            if content_type is not None:
+                kwargs["content_type"] = content_type
+        elif format is not None:
+            kwargs["format"] = format
+    if headers:
+        kwargs["headers"] = headers
+    return kwargs
+
+
+def _is_drf_client(client: Any) -> bool:
+    return any(cls.__module__.startswith("rest_framework.") for cls in type(client).__mro__)
+
+
+def _is_django_client(client: Any) -> bool:
+    return any(cls.__module__.startswith("django.test") for cls in type(client).__mro__)
+
+
+def _django_request_data(method: str, data: Any, format: str | None) -> tuple[Any, str | None]:
+    if format is None:
+        return data, None
+    if format == "json":
+        return data, "application/json"
+    if format == "multipart":
+        try:
+            from django.test.client import (  # type: ignore[import-untyped]
+                BOUNDARY,
+                MULTIPART_CONTENT,
+                encode_multipart,
+            )
+        except ImportError as exc:
+            raise AuthzExecutionError("Django test client support requires Django") from exc
+        if method == "POST":
+            return data, MULTIPART_CONTENT
+        try:
+            encoded = encode_multipart(BOUNDARY, data)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise AuthzExecutionError(
+                "Django multipart request data must be a mapping"
+            ) from exc
+        return encoded, MULTIPART_CONTENT
+    raise AuthzExecutionError(
+        f"Django test client does not support request format {format!r}; "
+        "use 'json', 'multipart', or null"
+    )
 
 
 def _response_detail(response: Any) -> str:
