@@ -18,7 +18,7 @@ It is built for the bugs that ordinary authentication tests miss:
 - an endpoint returns `403` when policy requires concealing the object's existence with `404`;
 - a new DRF route ships without any ownership or cross-tenant test.
 
-> **Status:** `0.1.0` is an alpha focused on explicit DRF authorization contracts. The plugin
+> **Status:** `0.1.1` is an alpha focused on explicit DRF authorization contracts. The plugin
 > discovers untested routes; it deliberately does not guess your business authorization policy.
 
 ## Quick start
@@ -28,6 +28,11 @@ Install the plugin with its DRF integration:
 ```bash
 pip install "pytest-authz-matrix[django]"
 ```
+
+Version 0.1.1 explicitly tests Django 4.2, 5.0, 5.1, 5.2 LTS, 6.0, and 6.1 across their compatible
+Python and Django REST Framework boundaries. Django 4.2, 5.0, and 5.1 are retained as legacy
+compatibility targets even though upstream security support has ended. See the complete
+[`Django compatibility matrix`](docs/compatibility.md).
 
 Create `authz-matrix.yml` in the pytest root:
 
