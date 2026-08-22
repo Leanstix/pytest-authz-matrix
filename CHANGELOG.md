@@ -19,6 +19,9 @@ the public API leaves alpha.
   cross-tenant, client-default header, and custom-action behavior.
 - An `--authz-require-complete` CI gate with explicit reporting for unexecuted cases, unasserted
   responses, and assertions made without the configured request.
+- A migrated pytest-django integration project covering ORM-backed `ModelViewSet` actions,
+  serializers, tenant-filtered querysets, object permissions, UUID lookups, transactions, and
+  persisted create, update, partial-update, and delete behavior.
 
 ### Changed
 
@@ -33,6 +36,8 @@ the public API leaves alpha.
   matrix cases in a matching contract have completed their requests and assertions.
 - `--authz-fail-under` now rejects incomplete configured contracts as well as insufficient route
   coverage, preventing uncollected authorization tests from producing a false-green result.
+- The `django` extra and compatibility jobs now include pytest-django 4.x so the declared Django
+  support surface is exercised through real database fixtures.
 
 ## [0.1.0] - 2026-08-15
 

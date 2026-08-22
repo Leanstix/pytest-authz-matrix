@@ -38,6 +38,9 @@ The integration suite exercises real router-registered ViewSets, custom actions,
 request formats, primary HTTP methods, and authenticated DRF and plain Django clients. See
 [`Django and DRF integration`](docs/django.md) for the production-tested behavior.
 
+It also applies real migrations and exercises ORM-backed `ModelViewSet` list, create, retrieve,
+update, partial-update, and destroy operations through pytest-django.
+
 Create `authz-matrix.yml` in the pytest root:
 
 ```yaml

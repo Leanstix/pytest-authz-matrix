@@ -59,5 +59,34 @@ The executable integration coverage includes authenticated and anonymous actors,
 responses, concealed resources, owner and foreign-tenant relationships, repeated query
 parameters, request payload fixtures, and namespaced custom actions.
 
+## ORM and ModelViewSet behavior
+
+The `django` extra installs `pytest-django` alongside Django and DRF. Configure pytest-django as
+usual, for example:
+
+```ini
+[pytest]
+DJANGO_SETTINGS_MODULE = project.settings
+```
+
+Authorization tests that use ORM-backed actor or resource fixtures must opt into database access
+with `@pytest.mark.django_db`. The plugin deliberately does not add the marker automatically
+because the application owns its database and transaction requirements.
+
+The production integration suite applies real migrations and runs all six standard
+`ModelViewSet` actions through a serializer and SQLite test database. It verifies:
+
+- tenant isolation implemented by `get_queryset()`;
+- object-level permissions after queryset filtering;
+- UUID resources resolved through a custom `lookup_field`;
+- list results containing only objects from the actor's tenant;
+- create ownership and tenant fields supplied by `perform_create()`;
+- persisted `PUT` and `PATCH` changes for an allowed owner;
+- unchanged database state after denied or concealed writes; and
+- deletion only for the allowed owner, including a transactional database test.
+
+Actor and resource fixtures remain ordinary pytest fixtures, so applications may use factories,
+`db`, `transactional_db`, or their existing pytest-django fixture stack.
+
 The plugin intentionally does not create users, authenticate actors, or infer authorization
 policy. It executes the actor clients and expectations declared by the application.
