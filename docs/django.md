@@ -65,9 +65,47 @@ Actor fixtures own authentication and client-wide state. This includes DRF
 Contract request headers are merged into that client state, and explicit headers supplied to
 `authz_case.execute()` take precedence over contract headers.
 
+The authentication integration project uses Django's migrated auth, session, and DRF token
+tables. It verifies these concrete actor-fixture patterns:
+
+| Actor state | Tested behavior |
+|---|---|
+| Logged-in session with CSRF cookie and header | Authenticated write succeeds |
+| Logged-in session without a CSRF token | `SessionAuthentication` rejects the write with 403 |
+| Client after `logout()` | Session cookie state no longer authenticates the request |
+| `APIClient.credentials()` with a real DRF token | `TokenAuthentication` resolves the database user |
+| Invalid token or no credentials | Token-protected endpoint returns 401 |
+
+The plugin does not manufacture these states. Each actor fixture remains responsible for login,
+cookies, CSRF acquisition, and credential headers, exactly as it would be in the application's
+ordinary test suite.
+
 The executable integration coverage includes authenticated and anonymous actors, allow and deny
 responses, concealed resources, owner and foreign-tenant relationships, repeated query
 parameters, request payload fixtures, and namespaced custom actions.
+
+## Request and response boundaries
+
+The Stage 5 integration project extends request execution beyond scalar form fields. A multipart
+contract sends a real `SimpleUploadedFile` and verifies its name, size, media type, and bytes after
+DRF parsing. A registered vendor JSON renderer/parser pair verifies that custom DRF test formats
+retain their declared media type and structured request data.
+
+Header precedence is deterministic:
+
+1. state configured on the actor client remains in effect;
+2. contract `request.headers` are added for the generated case; and
+3. headers passed directly to `authz_case.run()` or `execute()` override matching contract keys.
+
+Responses are asserted by HTTP status without assuming a JSON body. The integration suite covers
+an empty 204 response, a binary non-UTF-8 response, an ordinary 302 response without following its
+location, Django's `APPEND_SLASH` 301 behavior, and DRF responses generated from `NotFound` and
+`PermissionDenied`. Failure diagnostics decode opaque bytes with replacement characters rather
+than raising a secondary Unicode error.
+
+Plain Django async views are supported through Django's synchronous test-client adaptation. The
+plugin invokes the configured client method normally and does not impose its own sync/async event
+loop behavior.
 
 ## ORM and ModelViewSet behavior
 

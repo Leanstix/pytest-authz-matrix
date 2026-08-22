@@ -47,6 +47,10 @@ request formats, primary HTTP methods, and authenticated DRF and plain Django cl
 It also applies real migrations and exercises ORM-backed `ModelViewSet` list, create, retrieve,
 update, partial-update, and destroy operations through pytest-django.
 
+Authentication hardening uses real Django sessions, CSRF enforcement, cookies, logout, and DRF
+database tokens. Request-boundary coverage includes uploaded files, custom media types, header
+precedence, redirects, exception responses, opaque bodies, and async Django views.
+
 Create `authz-matrix.yml` in the pytest root:
 
 ```yaml
