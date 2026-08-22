@@ -44,6 +44,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         metavar="PERCENT",
         help="fail when discovered DRF route coverage is below this percentage",
     )
+    group.addoption(
+        "--authz-require-complete",
+        action="store_true",
+        help="fail unless every configured authorization case is executed and asserted",
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -72,6 +77,11 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         coverage = reporter.route_coverage
         if threshold is not None and (coverage is None or coverage < threshold):
             session.exitstatus = pytest.ExitCode.TESTS_FAILED
+        require_complete = bool(
+            session.config.getoption("--authz-require-complete") or threshold is not None
+        )
+        if require_complete and not reporter.execution_complete:
+            session.exitstatus = pytest.ExitCode.TESTS_FAILED
     except (AuthzConfigurationError, pytest.UsageError, OSError) as exc:
         reporter.error = str(exc)
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
@@ -80,7 +90,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 def pytest_terminal_summary(
     terminalreporter: pytest.TerminalReporter, exitstatus: int, config: pytest.Config
 ) -> None:
-    if not config.getoption("--authz-report"):
+    if not _terminal_reporting_requested(config):
         return
     reporter = _get_recorder(config)
     if reporter is None:
@@ -161,6 +171,15 @@ def _reporting_requested(config: pytest.Config) -> bool:
         config.getoption("--authz-report")
         or config.getoption("--authz-report-json")
         or config.getoption("--authz-fail-under") is not None
+        or config.getoption("--authz-require-complete")
+    )
+
+
+def _terminal_reporting_requested(config: pytest.Config) -> bool:
+    return bool(
+        config.getoption("--authz-report")
+        or config.getoption("--authz-fail-under") is not None
+        or config.getoption("--authz-require-complete")
     )
 
 

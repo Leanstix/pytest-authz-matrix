@@ -17,6 +17,8 @@ the public API leaves alpha.
   multipart, and default form payloads through real DRF clients.
 - Authenticated and anonymous `APIClient` coverage, including owner, concealment, denial,
   cross-tenant, client-default header, and custom-action behavior.
+- An `--authz-require-complete` CI gate with explicit reporting for unexecuted cases, unasserted
+  responses, and assertions made without the configured request.
 
 ### Changed
 
@@ -27,6 +29,10 @@ the public API leaves alpha.
 - Plain Django `Client` requests translate `json` and `multipart` formats to Django-native
   encoding, including multipart requests for non-POST methods. Unsupported Django formats now
   raise an actionable `AuthzExecutionError`.
+- DRF route coverage is now execution-backed. A configured route counts as covered only when all
+  matrix cases in a matching contract have completed their requests and assertions.
+- `--authz-fail-under` now rejects incomplete configured contracts as well as insufficient route
+  coverage, preventing uncollected authorization tests from producing a false-green result.
 
 ## [0.1.0] - 2026-08-15
 
