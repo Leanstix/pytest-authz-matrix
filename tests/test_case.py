@@ -39,6 +39,15 @@ class FakeClient:
         return Response(self.status, {"path": path})
 
 
+class GenericOnlyClient:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, dict[str, Any]]] = []
+
+    def generic(self, method: str, path: str, **kwargs: Any) -> Response:
+        self.calls.append((method, path, kwargs))
+        return Response(200)
+
+
 class FakeRequest:
     def __init__(self, fixtures: dict[str, Any]) -> None:
         self.fixtures = fixtures
@@ -125,3 +134,31 @@ def test_missing_relationship_has_actionable_error() -> None:
 
     with pytest.raises(AuthzExecutionError, match="relationship 'owned'"):
         _ = case.resource
+
+
+def test_falls_back_to_generic_client_method() -> None:
+    case, _ = make_case()
+    client = GenericOnlyClient()
+    case._request.fixtures["owner_client"] = client  # type: ignore[attr-defined]
+
+    case.run()
+
+    assert client.calls == [
+        (
+            "PATCH",
+            "/estates/estate%201/bookings/B%2F42/?notify=yes&tag=a&tag=b",
+            {
+                "data": {"status": "approved"},
+                "format": "json",
+                "headers": {"X-Request-Source": "authz"},
+            },
+        )
+    ]
+
+
+def test_rejects_client_without_method_or_generic_sender() -> None:
+    case, _ = make_case()
+    case._request.fixtures["owner_client"] = object()  # type: ignore[attr-defined]
+
+    with pytest.raises(AuthzExecutionError, match=r"neither patch\(\) nor generic\(\)"):
+        case.execute()
