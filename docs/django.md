@@ -75,10 +75,19 @@ tables. It verifies these concrete actor-fixture patterns:
 | Client after `logout()` | Session cookie state no longer authenticates the request |
 | `APIClient.credentials()` with a real DRF token | `TokenAuthentication` resolves the database user |
 | Invalid token or no credentials | Token-protected endpoint returns 401 |
+| Valid SimpleJWT access token | `JWTAuthentication` resolves the database user |
+| Expired, malformed, refresh, or missing JWT | JWT-protected endpoint returns 401 with `Bearer` challenge |
 
 The plugin does not manufacture these states. Each actor fixture remains responsible for login,
 cookies, CSRF acquisition, and credential headers, exactly as it would be in the application's
 ordinary test suite.
+
+SimpleJWT is an optional ecosystem integration rather than a base dependency. Install it with
+`pytest-authz-matrix[django,jwt]`. The compatibility matrix tests SimpleJWT 5.5.x across every
+declared Django/DRF boundary. Authentication-class order remains DRF behavior: a session-first
+stack can return 403 without a challenge, while a JWT-first stack returns 401 with
+`WWW-Authenticate: Bearer`. An invalid JWT presented to a JWT-first stack is not silently replaced
+by a valid session further down that stack.
 
 The executable integration coverage includes authenticated and anonymous actors, allow and deny
 responses, concealed resources, owner and foreign-tenant relationships, repeated query
@@ -97,6 +106,9 @@ Header precedence is deterministic:
 2. contract `request.headers` are added for the generated case; and
 3. headers passed directly to `authz_case.run()` or `execute()` override matching contract keys.
 
+Header names are compared case-insensitively during that merge, so an explicit `x-policy` replaces
+a configured `X-Policy` instead of sending duplicate logical headers.
+
 Responses are asserted by HTTP status without assuming a JSON body. The integration suite covers
 an empty 204 response, a binary non-UTF-8 response, an ordinary 302 response without following its
 location, Django's `APPEND_SLASH` 301 behavior, and DRF responses generated from `NotFound` and
@@ -105,7 +117,29 @@ than raising a secondary Unicode error.
 
 Plain Django async views are supported through Django's synchronous test-client adaptation. The
 plugin invokes the configured client method normally and does not impose its own sync/async event
-loop behavior.
+loop behavior. `django.test.AsyncClient` and other clients returning awaitables are not supported
+by the synchronous `authz_case` API. They fail immediately with `AuthzExecutionError`; use
+`django.test.Client` to exercise an async Django view.
+
+## Protocol and deployment boundaries
+
+The release-closure integration project also proves:
+
+- custom response renderers selected through `Accept`;
+- `400` malformed JSON, `406` unacceptable media, and `415` unsupported media responses;
+- project-defined DRF exception handlers and arbitrary configured status outcomes;
+- throttled `429` responses, including `Retry-After`;
+- Django `StreamingHttpResponse` and `FileResponse` status assertions;
+- host state supplied by an actor fixture; and
+- secure-proxy detection and secure/HTTP-only/SameSite response cookies.
+
+The proxy test proves that actor-client state reaches Django correctly. It does not validate a
+production reverse proxy, certificate, HSTS policy, or cookie deployment configuration.
+
+Channels/WebSocket consumers, ASGI lifespan behavior, `AsyncClient`, token issuance/refresh
+workflows, and application-specific authentication backends remain outside the 0.1.1 execution
+contract. Those systems may still provide actor fixtures backed by a synchronous HTTP client, but
+the plugin does not claim native lifecycle support for them.
 
 ## ORM and ModelViewSet behavior
 

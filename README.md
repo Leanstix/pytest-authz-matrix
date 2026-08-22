@@ -35,6 +35,12 @@ Projects that run pytest in parallel can install the tested xdist integration:
 pip install "pytest-authz-matrix[django,xdist]"
 ```
 
+Projects using SimpleJWT can install the tested JWT integration dependency:
+
+```bash
+pip install "pytest-authz-matrix[django,jwt]"
+```
+
 Version 0.1.1 explicitly tests Django 4.2, 5.0, 5.1, 5.2 LTS, 6.0, and 6.1 across their compatible
 Python and Django REST Framework boundaries. Django 4.2, 5.0, and 5.1 are retained as legacy
 compatibility targets even though upstream security support has ended. See the complete
@@ -48,8 +54,11 @@ It also applies real migrations and exercises ORM-backed `ModelViewSet` list, cr
 update, partial-update, and destroy operations through pytest-django.
 
 Authentication hardening uses real Django sessions, CSRF enforcement, cookies, logout, and DRF
-database tokens. Request-boundary coverage includes uploaded files, custom media types, header
-precedence, redirects, exception responses, opaque bodies, and async Django views.
+database tokens. It also exercises SimpleJWT access tokens, expired and malformed tokens,
+refresh-token misuse, authentication-class ordering, and `WWW-Authenticate` behavior.
+Request-boundary coverage includes uploaded files, custom media types, case-insensitive header
+precedence, negotiation failures, redirects, throttling, exception responses, streaming and
+opaque bodies, secure proxy/host state, and async Django views through the synchronous client.
 
 Create `authz-matrix.yml` in the pytest root:
 
