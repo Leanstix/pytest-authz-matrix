@@ -98,5 +98,28 @@ The production integration suite applies real migrations and runs all six standa
 Actor and resource fixtures remain ordinary pytest fixtures, so applications may use factories,
 `db`, `transactional_db`, or their existing pytest-django fixture stack.
 
+## Parallel pytest execution
+
+Install the optional xdist integration and run pytest normally:
+
+```bash
+pip install "pytest-authz-matrix[django,xdist]"
+pytest -n auto --authz-report --authz-fail-under=100
+```
+
+Each worker records only the cases it executes. At worker shutdown, that serializable state is
+sent through xdist's controller channel. The controller then:
+
+1. merges and deduplicates executed and asserted case IDs;
+2. preserves a failing result if duplicate executions disagree;
+3. performs Django route discovery once;
+4. evaluates execution completeness and route thresholds once; and
+5. writes one terminal report and one JSON report.
+
+Workers never write the configured JSON path or independently apply coverage gates, avoiding file
+races and false failures from their intentionally partial test allocations. If a worker fails to
+return cases, strict execution completeness leaves those configured cases missing and the
+controller gate fails rather than reporting false success.
+
 The plugin intentionally does not create users, authenticate actors, or infer authorization
 policy. It executes the actor clients and expectations declared by the application.

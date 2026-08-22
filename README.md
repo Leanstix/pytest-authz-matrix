@@ -29,6 +29,12 @@ Install the plugin with its DRF integration:
 pip install "pytest-authz-matrix[django]"
 ```
 
+Projects that run pytest in parallel can install the tested xdist integration:
+
+```bash
+pip install "pytest-authz-matrix[django,xdist]"
+```
+
 Version 0.1.1 explicitly tests Django 4.2, 5.0, 5.1, 5.2 LTS, 6.0, and 6.1 across their compatible
 Python and Django REST Framework boundaries. Django 4.2, 5.0, and 5.1 are retained as legacy
 compatibility targets even though upstream security support has ended. See the complete
@@ -266,6 +272,10 @@ pytest --authz-require-complete
 
 The terminal and JSON reports distinguish cases that were never executed, executed without an
 assertion, and asserted without their configured request.
+
+Parallel execution with `pytest -n auto` is supported. Workers send their authorization results
+to the xdist controller, which performs route discovery, completeness and threshold gates, and
+terminal/JSON reporting once. See [parallel pytest execution](docs/django.md#parallel-pytest-execution).
 
 Deliberately public or generated endpoints can be removed from the denominator with an auditable
 exclusion:

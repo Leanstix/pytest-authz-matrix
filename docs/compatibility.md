@@ -28,6 +28,12 @@ djangorestframework>=3.15.2,<3.19
 pytest-django>=4.8,<5
 ```
 
+Parallel reporting is available through a separate extra:
+
+```text
+pytest-xdist>=3.6,<4
+```
+
 Pip will select a mutually compatible Django/DRF pair. For example, DRF 3.18 requires Django 5.2
 or newer, so an environment pinned to Django 5.0 resolves to the latest compatible DRF 3.17
 release.
@@ -47,6 +53,7 @@ explicit green CI job.
 
 Every compatibility job also installs pytest-django 4.x and runs the real migrated ORM and
 `ModelViewSet` integration project, not only client and route-discovery unit tests.
+It also installs pytest-xdist 3.x and runs a two-worker strict terminal/JSON reporting project.
 
 The complete suite includes executable DRF applications. It covers router-registered ViewSets,
 standard and custom actions, nested namespaces, APIViews, function views, primary HTTP methods,
