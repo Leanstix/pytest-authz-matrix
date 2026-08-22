@@ -275,3 +275,107 @@ def test_booking_list_authorization(authz_case):
             "  missing: GET health-check",
         ]
     )
+
+
+def test_reasoned_route_exclusion_passes_strict_cli_and_json_reporting(
+    pytester: pytest.Pytester,
+) -> None:
+    pytester.makepyfile(
+        api_urls="""
+from django.urls import path
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+
+class BookingList(APIView):
+    def get(self, request):
+        return Response({'results': []})
+
+
+class HealthCheck(APIView):
+    def get(self, request):
+        return Response({'ok': True})
+
+
+urlpatterns = [
+    path('bookings/', BookingList.as_view(), name='booking-list'),
+    path('health/', HealthCheck.as_view(), name='health-check'),
+]
+"""
+    )
+    pytester.makeconftest(
+        """
+from django.conf import settings
+
+if not settings.configured:
+    settings.configure(
+        SECRET_KEY='test',
+        ROOT_URLCONF='api_urls',
+        ALLOWED_HOSTS=['testserver'],
+        REST_FRAMEWORK={'UNAUTHENTICATED_USER': None},
+    )
+
+import django
+django.setup()
+
+import pytest
+from rest_framework.test import APIClient
+
+
+@pytest.fixture
+def owner_client():
+    return APIClient()
+"""
+    )
+    (pytester.path / "authz-matrix.yml").write_text(
+        """
+version: 1
+actors:
+  owner: owner_client
+coverage:
+  exclude:
+    - method: GET
+      route_name: health-check
+      reason: Public infrastructure liveness endpoint
+contracts:
+  booking.list:
+    method: GET
+    path: /bookings/
+    route_name: booking-list
+    matrix:
+      owner: allow
+""",
+        encoding="utf-8",
+    )
+    pytester.makepyfile(
+        """
+import pytest
+
+
+@pytest.mark.authz_contract('booking.list')
+def test_booking_list_authorization(authz_case):
+    authz_case.run()
+"""
+    )
+
+    result = pytester.runpytest_subprocess(
+        "-q",
+        "--authz-fail-under=100",
+        "--authz-report-json=report.json",
+    )
+
+    result.assert_outcomes(passed=1)
+    result.stdout.fnmatch_lines(
+        [
+            "DRF route coverage: 1/1 (100.0%)",
+            "  excluded: GET health-check (Public infrastructure liveness endpoint)",
+        ]
+    )
+    report = json.loads((pytester.path / "report.json").read_text(encoding="utf-8"))
+    assert report["drf_routes"]["total"] == 2
+    assert report["drf_routes"]["eligible"] == 1
+    assert report["drf_routes"]["coverage_percent"] == 100.0
+    assert report["drf_routes"]["excluded"][0]["id"] == "GET health-check"
+    assert report["drf_routes"]["excluded"][0]["reasons"] == [
+        "Public infrastructure liveness endpoint"
+    ]
