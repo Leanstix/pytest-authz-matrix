@@ -1,9 +1,9 @@
 # Changelog
 
-All notable changes will be documented in this file. The project follows semantic versioning once
-the public API leaves alpha.
+All notable changes will be documented in this file. The project follows semantic versioning;
+while the version remains below 1.0, its public API may evolve between minor releases.
 
-## [0.1.1] - Unreleased
+## [0.1.1] - 2026-08-22
 
 ### Added
 

@@ -18,7 +18,8 @@ It is built for the bugs that ordinary authentication tests miss:
 - an endpoint returns `403` when policy requires concealing the object's existence with `404`;
 - a new DRF route ships without any ownership or cross-tenant test.
 
-> **Status:** `0.1.1` is an alpha focused on explicit DRF authorization contracts. The plugin
+> **Status:** `0.1.1` provides a production-ready Django/DRF integration for the documented
+> synchronous HTTP surface. The package remains pre-1.0, so its public API may evolve. The plugin
 > discovers untested routes; it deliberately does not guess your business authorization policy.
 
 ## Quick start
