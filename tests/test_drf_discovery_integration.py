@@ -267,9 +267,30 @@ import django
 django.setup()
 """
     )
+    (pytester.path / "authz-matrix.yml").write_text(
+        """
+version: 1
+actors:
+  member: member_client
+coverage:
+  exclude:
+    - method: GET
+      route_name: api-root
+      reason: Generated DefaultRouter index
+contracts:
+  booking.list:
+    method: GET
+    path: /api/bookings/
+    route_name: booking-list
+    matrix:
+      member: allow
+""",
+        encoding="utf-8",
+    )
     pytester.makepyfile(
         """
-from pytest_authz_matrix.discovery import discover_drf_routes
+from pytest_authz_matrix.config import load_config
+from pytest_authz_matrix.discovery import discover_drf_routes, excluded_routes
 
 
 def test_default_router_inventory():
@@ -283,6 +304,173 @@ def test_default_router_inventory():
     }
     assert len(result.routes) == 3
     assert not any('format' in route.pattern for route in result.routes)
+    excluded = excluded_routes(result, load_config('authz-matrix.yml'))
+    assert {route.id: reasons for route, reasons in excluded.items()} == {
+        'GET v1:api-root': ('Generated DefaultRouter index',),
+    }
+"""
+    )
+
+    result = pytester.runpytest_subprocess("-q")
+
+    result.assert_outcomes(passed=1)
+
+
+def test_discovery_retains_real_format_parameters_and_respects_disabled_methods(
+    pytester: pytest.Pytester,
+) -> None:
+    pytester.makepyfile(
+        api_urls=r"""
+from django.urls import include, path, re_path
+from rest_framework.response import Response
+from rest_framework.routers import SimpleRouter
+from rest_framework.views import APIView
+from rest_framework.viewsets import ModelViewSet
+
+
+class ExportView(APIView):
+    def get(self, request, format):
+        return Response({'format': format})
+
+
+class ReadOnlyBookingViewSet(ModelViewSet):
+    http_method_names = ['get', 'head', 'options']
+
+    def list(self, request):
+        return Response([])
+
+    def retrieve(self, request, pk=None):
+        return Response({'id': pk})
+
+
+router = SimpleRouter()
+router.register('bookings', ReadOnlyBookingViewSet, basename='booking')
+
+urlpatterns = [
+    re_path(r'^exports/(?P<format>json|csv)/$', ExportView.as_view(), name='export'),
+    path('api/', include(router.urls)),
+]
+"""
+    )
+    pytester.makeconftest(
+        """
+from django.conf import settings
+
+if not settings.configured:
+    settings.configure(
+        SECRET_KEY='test',
+        ROOT_URLCONF='api_urls',
+        ALLOWED_HOSTS=['testserver'],
+        REST_FRAMEWORK={'UNAUTHENTICATED_USER': None},
+    )
+
+import django
+django.setup()
+"""
+    )
+    pytester.makepyfile(
+        r"""
+from pytest_authz_matrix.discovery import discover_drf_routes
+
+
+def test_precise_inventory():
+    result = discover_drf_routes()
+
+    assert result.available, result.reason
+    assert {(route.method, route.name) for route in result.routes} == {
+        ('GET', 'export'),
+        ('GET', 'booking-list'),
+        ('GET', 'booking-detail'),
+    }
+    export = next(route for route in result.routes if route.name == 'export')
+    assert r'(?P<format>json|csv)' in export.pattern
+"""
+    )
+
+    result = pytester.runpytest_subprocess("-q")
+
+    result.assert_outcomes(passed=1)
+
+
+def test_duplicate_names_require_path_match_and_unnamed_routes_use_paths(
+    pytester: pytest.Pytester,
+) -> None:
+    pytester.makepyfile(
+        api_urls="""
+from django.urls import path
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+
+class ExampleView(APIView):
+    def get(self, request):
+        return Response({'ok': True})
+
+
+urlpatterns = [
+    path('alpha/', ExampleView.as_view(), name='duplicate'),
+    path('beta/', ExampleView.as_view(), name='duplicate'),
+    path('unnamed/', ExampleView.as_view()),
+    path('ignored/', ExampleView.as_view()),
+]
+"""
+    )
+    pytester.makeconftest(
+        """
+from django.conf import settings
+
+if not settings.configured:
+    settings.configure(
+        SECRET_KEY='test',
+        ROOT_URLCONF='api_urls',
+        ALLOWED_HOSTS=['testserver'],
+        REST_FRAMEWORK={'UNAUTHENTICATED_USER': None},
+    )
+
+import django
+django.setup()
+"""
+    )
+    (pytester.path / "authz-matrix.yml").write_text(
+        """
+version: 1
+actors:
+  member: member_client
+coverage:
+  exclude:
+    - method: GET
+      path: /ignored/
+      reason: Deliberately public endpoint
+contracts:
+  alpha.retrieve:
+    method: GET
+    path: /alpha/
+    route_name: duplicate
+    matrix:
+      member: allow
+  unnamed.retrieve:
+    method: GET
+    path: /unnamed/
+    matrix:
+      member: allow
+""",
+        encoding="utf-8",
+    )
+    pytester.makepyfile(
+        """
+from pytest_authz_matrix.config import load_config
+from pytest_authz_matrix.discovery import covered_routes, discover_drf_routes, excluded_routes
+
+
+def test_unambiguous_matching():
+    config = load_config('authz-matrix.yml')
+    discovery = discover_drf_routes()
+    covered, uncovered = covered_routes(discovery, config)
+    excluded = excluded_routes(discovery, config)
+
+    assert {route.pattern for route in covered} == {'alpha/', 'unnamed/'}
+    assert {route.pattern for route in uncovered} == {'beta/'}
+    assert {route.pattern for route in excluded} == {'ignored/'}
 """
     )
 

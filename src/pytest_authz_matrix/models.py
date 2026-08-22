@@ -63,6 +63,23 @@ class ContractSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class RouteExclusionSpec:
+    """One deliberate route-coverage exclusion with an audit reason."""
+
+    reason: str
+    method: str | None = None
+    route_name: str | None = None
+    path: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CoverageSpec:
+    """Route-coverage policy declared by the application."""
+
+    exclusions: tuple[RouteExclusionSpec, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class MatrixConfig:
     """Validated top-level authorization configuration."""
 
@@ -71,6 +88,7 @@ class MatrixConfig:
     resources: dict[str, ResourceSpec]
     outcomes: dict[str, tuple[int, ...]]
     contracts: dict[str, ContractSpec]
+    coverage: CoverageSpec = field(default_factory=CoverageSpec)
 
 
 @dataclass(frozen=True, slots=True)

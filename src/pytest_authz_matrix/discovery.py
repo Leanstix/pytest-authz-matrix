@@ -117,15 +117,38 @@ def covered_routes(
         return set(), set()
     covered: set[DiscoveredRoute] = set()
     uncovered: set[DiscoveredRoute] = set()
+    excluded = excluded_routes(discovery, config)
     contracts = tuple(
         contract
         for name, contract in config.contracts.items()
         if contract_names is None or name in contract_names
     )
     for route in discovery.routes:
+        if route in excluded:
+            continue
         target = covered if any(_matches(route, contract) for contract in contracts) else uncovered
         target.add(route)
     return covered, uncovered
+
+
+def excluded_routes(
+    discovery: DiscoveryResult,
+    config: MatrixConfig,
+) -> dict[DiscoveredRoute, tuple[str, ...]]:
+    """Return deliberately excluded routes and every matching audit reason."""
+
+    if not discovery.available:
+        return {}
+    excluded: dict[DiscoveredRoute, tuple[str, ...]] = {}
+    for route in discovery.routes:
+        reasons = tuple(
+            exclusion.reason
+            for exclusion in config.coverage.exclusions
+            if _exclusion_matches(route, exclusion.method, exclusion.route_name, exclusion.path)
+        )
+        if reasons:
+            excluded[route] = reasons
+    return excluded
 
 
 def normalize_path(path: str) -> str:
@@ -141,18 +164,21 @@ def normalize_path(path: str) -> str:
 
 
 def _view_methods(callback: Any, view_class: type[Any]) -> tuple[str, ...]:
+    declared = tuple(str(method).lower() for method in getattr(view_class, "http_method_names", ()))
+    enabled = {
+        method.upper() for method in declared if method.upper() not in {"HEAD", "OPTIONS"}
+    }
     actions = getattr(callback, "actions", None)
     if actions:
-        methods = actions.keys()
+        methods = (method for method in actions if str(method).upper() in enabled)
     else:
         methods = (
             method
-            for method in getattr(view_class, "http_method_names", ())
+            for method in declared
+            if method.upper() in enabled
             if callable(getattr(view_class, method, None))
         )
-    allowed = {
-        str(method).upper() for method in methods if str(method).upper() not in {"HEAD", "OPTIONS"}
-    }
+    allowed = {str(method).upper() for method in methods}
     return tuple(sorted(allowed))
 
 
@@ -160,12 +186,30 @@ def _is_format_suffix_pattern(pattern: Any) -> bool:
     """Return whether DRF added this as a content-negotiation URL alias."""
 
     rendered = str(pattern.pattern)
-    return "<drf_format_suffix:format>" in rendered or "(?P<format>" in rendered
+    return "<drf_format_suffix:format>" in rendered or r"\.(?P<format>" in rendered
 
 
 def _matches(route: DiscoveredRoute, contract: ContractSpec) -> bool:
     if route.method != contract.method:
         return False
     if contract.route_name and route.name:
-        return contract.route_name in {route.name, route.name.rsplit(":", 1)[-1]}
+        name_matches = contract.route_name in {route.name, route.name.rsplit(":", 1)[-1]}
+        return name_matches and normalize_path(route.pattern) == normalize_path(contract.path)
     return normalize_path(route.pattern) == normalize_path(contract.path)
+
+
+def _exclusion_matches(
+    route: DiscoveredRoute,
+    method: str | None,
+    route_name: str | None,
+    path: str | None,
+) -> bool:
+    if method is not None and route.method != method:
+        return False
+    if route_name is not None:
+        if route.name is None:
+            return False
+        return route_name in {route.name, route.name.rsplit(":", 1)[-1]}
+    if path is not None:
+        return normalize_path(route.pattern) == normalize_path(path)
+    return False
