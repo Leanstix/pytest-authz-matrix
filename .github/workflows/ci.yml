@@ -126,10 +126,13 @@ jobs:
 
           django_version = django.get_version()
           drf_version = rest_framework.VERSION
+          expected_django = os.environ["EXPECTED_DJANGO"]
           print(f"Python {platform.python_version()}")
           print(f"Django {django_version}")
           print(f"Django REST Framework {drf_version}")
-          assert django_version.startswith(f"{os.environ['EXPECTED_DJANGO']}.")
+          assert django_version == expected_django or django_version.startswith(
+              f"{expected_django}."
+          )
           assert drf_version == os.environ["EXPECTED_DRF"]
           PY
       - name: Test pinned compatibility environment
