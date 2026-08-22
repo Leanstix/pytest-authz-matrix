@@ -236,8 +236,8 @@ Example output:
 
 ```text
 ============================= authorization matrix =============================
-authorization cases: 12/12 asserted, 12 passed, 0 failed
-authorization contracts: 1/1 exercised
+authorization cases: 12/12 complete, 12 executed, 12 asserted, 12 passed, 0 failed
+authorization contracts: 1/1 complete
 DRF route coverage: 9/11 (81.8%)
   missing: PATCH children-detail
   missing: POST booking-refund
@@ -248,6 +248,21 @@ Fail CI when route coverage drops below a threshold:
 ```bash
 pytest --authz-report --authz-fail-under=85
 ```
+
+Route coverage is execution-backed: a matching YAML entry does not cover a route by itself. Every
+matrix case in the matching contract must complete its configured request and call
+`authz_case.assert_response()`. `authz_case.run()` performs both operations.
+
+`--authz-fail-under` also requires every configured case to be complete, preventing a configured
+but uncollected contract from producing a false-green CI result. Enforce execution completeness
+without a route threshold with:
+
+```bash
+pytest --authz-require-complete
+```
+
+The terminal and JSON reports distinguish cases that were never executed, executed without an
+assertion, and asserted without their configured request.
 
 Write machine-readable results:
 

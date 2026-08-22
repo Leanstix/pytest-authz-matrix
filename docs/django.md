@@ -19,6 +19,14 @@ Coverage is tracked for each application HTTP method and route pair. Django's au
 and `OPTIONS` handlers are excluded because they do not represent separately implemented
 authorization operations.
 
+Coverage is also execution-backed. A route is covered only when every configured actor and
+relationship case in a matching contract both completes its request and asserts the response.
+Listing a contract in YAML without collecting its pytest test does not cover the route.
+
+Use `--authz-require-complete` to fail when any configured case was not executed and asserted.
+`--authz-fail-under` enables the same completeness requirement automatically in addition to its
+route percentage threshold.
+
 ## Request execution
 
 DRF's `APIClient` is the first-class execution client. The plugin preserves DRF's native
