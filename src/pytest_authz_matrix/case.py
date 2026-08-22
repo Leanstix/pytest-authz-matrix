@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Mapping
 from typing import Any, Protocol
 from urllib.parse import urlencode
@@ -90,9 +91,7 @@ class AuthorizationCase:
             self._optional_fixture(request_spec.query_fixture) if query is _UNSET else query
         )
         path = _append_query(self.path, query_data)
-        request_headers = dict(request_spec.headers)
-        if headers:
-            request_headers.update(headers)
+        request_headers = _merge_headers(request_spec.headers, headers)
 
         kwargs = _request_kwargs(
             client,
@@ -114,6 +113,15 @@ class AuthorizationCase:
                     f"{method}() nor generic()"
                 )
             response = generic(self.spec.contract.method, path, **kwargs)
+        if inspect.isawaitable(response):
+            close = getattr(response, "close", None)
+            if callable(close):
+                close()
+            raise AuthzExecutionError(
+                f"Fixture {self.spec.actor.client_fixture!r} returned an awaitable response; "
+                "async clients are not supported. Use django.test.Client to exercise async "
+                "Django views through its synchronous adapter."
+            )
         if self._recorder is not None:
             self._recorder.record_execution(self.spec)
         return response
@@ -165,6 +173,19 @@ def _append_query(path: str, query: Any | None) -> str:
         return path
     separator = "&" if "?" in path else "?"
     return f"{path}{separator}{encoded}"
+
+
+def _merge_headers(
+    configured: Mapping[str, str], overrides: Mapping[str, str] | None
+) -> dict[str, str]:
+    if not overrides:
+        return dict(configured)
+    override_names = {name.casefold() for name in overrides}
+    merged = {
+        name: value for name, value in configured.items() if name.casefold() not in override_names
+    }
+    merged.update(overrides)
+    return merged
 
 
 def _request_kwargs(

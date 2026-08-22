@@ -310,7 +310,7 @@ def test_vendor_media_type(authz_case):
 
 @pytest.mark.authz_contract('edge.headers')
 def test_explicit_header_override(authz_case):
-    response = authz_case.run(headers={'X-Policy': 'override'})
+    response = authz_case.run(headers={'x-policy': 'override'})
     assert response.data == {
         'policy': 'override',
         'client_default': 'fixture',

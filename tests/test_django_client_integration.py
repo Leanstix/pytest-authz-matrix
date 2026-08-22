@@ -238,3 +238,74 @@ def test_unsupported_format(authz_case):
     result = pytester.runpytest_subprocess("-q")
 
     result.assert_outcomes(passed=1)
+
+
+def test_django_async_client_is_rejected_with_actionable_guidance(
+    pytester: pytest.Pytester,
+) -> None:
+    pytester.makepyfile(
+        api_urls="""
+from django.http import JsonResponse
+from django.urls import path
+
+
+async def async_view(request):
+    return JsonResponse({'mode': 'async'})
+
+
+urlpatterns = [path('async/', async_view)]
+"""
+    )
+    pytester.makeconftest(
+        """
+from django.conf import settings
+
+if not settings.configured:
+    settings.configure(
+        SECRET_KEY='test',
+        ROOT_URLCONF='api_urls',
+        ALLOWED_HOSTS=['testserver'],
+    )
+
+import django
+django.setup()
+
+import pytest
+from django.test import AsyncClient
+
+
+@pytest.fixture
+def async_client():
+    return AsyncClient()
+"""
+    )
+    (pytester.path / "authz-matrix.yml").write_text(
+        """
+version: 1
+actors:
+  async: async_client
+contracts:
+  async.view:
+    method: GET
+    path: /async/
+    matrix:
+      async: allow
+""",
+        encoding="utf-8",
+    )
+    pytester.makepyfile(
+        """
+import pytest
+from pytest_authz_matrix.exceptions import AuthzExecutionError
+
+
+@pytest.mark.authz_contract('async.view')
+def test_async_client_boundary(authz_case):
+    with pytest.raises(AuthzExecutionError, match='async clients are not supported'):
+        authz_case.execute()
+"""
+    )
+
+    result = pytester.runpytest_subprocess("-q")
+
+    result.assert_outcomes(passed=1)

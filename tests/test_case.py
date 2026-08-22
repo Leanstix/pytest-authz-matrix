@@ -54,6 +54,11 @@ class GenericOnlyClient:
         return Response(200)
 
 
+class AsyncClient:
+    async def patch(self, path: str, **kwargs: Any) -> Response:
+        return Response(200)
+
+
 class FakeRequest:
     def __init__(self, fixtures: dict[str, Any]) -> None:
         self.fixtures = fixtures
@@ -127,6 +132,14 @@ def test_allows_request_overrides() -> None:
     assert client.calls[0][2]["headers"]["X-Test"] == "1"
 
 
+def test_header_overrides_are_case_insensitive() -> None:
+    case, client = make_case()
+
+    case.run(headers={"x-request-source": "explicit"})
+
+    assert client.calls[0][2]["headers"] == {"x-request-source": "explicit"}
+
+
 def test_failure_explains_case_and_response() -> None:
     case, _ = make_case(status=403, expected=(200, 204))
 
@@ -177,4 +190,12 @@ def test_rejects_client_without_method_or_generic_sender() -> None:
     case._request.fixtures["owner_client"] = object()  # type: ignore[attr-defined]
 
     with pytest.raises(AuthzExecutionError, match=r"neither patch\(\) nor generic\(\)"):
+        case.execute()
+
+
+def test_rejects_awaitable_client_response_with_actionable_error() -> None:
+    case, _ = make_case()
+    case._request.fixtures["owner_client"] = AsyncClient()  # type: ignore[attr-defined]
+
+    with pytest.raises(AuthzExecutionError, match="async clients are not supported"):
         case.execute()
