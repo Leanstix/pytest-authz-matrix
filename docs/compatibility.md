@@ -25,6 +25,7 @@ The optional `django` extra constrains installations to the complete tested fami
 ```text
 Django>=4.2,<6.2
 djangorestframework>=3.15.2,<3.19
+pytest-django>=4.8,<5
 ```
 
 Pip will select a mutually compatible Django/DRF pair. For example, DRF 3.18 requires Django 5.2
@@ -43,6 +44,9 @@ CI uses two complementary matrices:
 Every compatibility job prints and verifies the resolved Django, DRF, and Python versions before
 running the complete test suite. A version combination is not added to this table until it has an
 explicit green CI job.
+
+Every compatibility job also installs pytest-django 4.x and runs the real migrated ORM and
+`ModelViewSet` integration project, not only client and route-discovery unit tests.
 
 The complete suite includes executable DRF applications. It covers router-registered ViewSets,
 standard and custom actions, nested namespaces, APIViews, function views, primary HTTP methods,
