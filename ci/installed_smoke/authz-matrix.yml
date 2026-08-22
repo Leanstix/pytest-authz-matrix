@@ -1,0 +1,11 @@
+version: 1
+
+actors:
+  smoke: smoke_client
+
+contracts:
+  health.retrieve:
+    method: GET
+    path: /health
+    matrix:
+      smoke: allow

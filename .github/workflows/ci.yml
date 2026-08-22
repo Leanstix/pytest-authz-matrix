@@ -27,7 +27,7 @@ jobs:
       - name: Test
         run: pytest --cov=pytest_authz_matrix --cov-report=term-missing
       - name: Lint
-        run: ruff check src tests
+        run: ruff check src tests ci
       - name: Type check
         run: mypy src
       - name: Build distributions
@@ -134,3 +134,40 @@ jobs:
           PY
       - name: Test pinned compatibility environment
         run: pytest
+
+  package-artifacts:
+    name: Package artifact smoke tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Build wheel and source distribution
+        run: |
+          python -m pip install build
+          python -m build
+      - name: Validate artifact contents
+        run: python ci/check_artifacts.py
+      - name: Smoke test installed wheel
+        run: |
+          python -m venv .venv-wheel
+          .venv-wheel/bin/python -m pip install dist/*.whl
+          .venv-wheel/bin/python -m pytest ci/installed_smoke -q \
+            --authz-config=ci/installed_smoke/authz-matrix.yml
+      - name: Smoke test installed source distribution
+        run: |
+          python -m venv .venv-sdist
+          .venv-sdist/bin/python -m pip install dist/*.tar.gz
+          .venv-sdist/bin/python -m pytest ci/installed_smoke -q \
+            --authz-config=ci/installed_smoke/authz-matrix.yml
+      - name: Run tests bundled in source distribution
+        run: |
+          mkdir sdist-tree
+          tar -xzf dist/*.tar.gz -C sdist-tree --strip-components=1
+          python -m venv .venv-sdist-tests
+          .venv-sdist-tests/bin/python -m pip install "./sdist-tree[dev]"
+          cd sdist-tree
+          ../.venv-sdist-tests/bin/python -m pytest
