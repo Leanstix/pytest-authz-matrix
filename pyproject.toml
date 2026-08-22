@@ -36,6 +36,7 @@ dependencies = [
 django = [
   "Django>=4.2,<6.2",
   "djangorestframework>=3.15.2,<3.19",
+  "pytest-django>=4.8,<5",
 ]
 dev = [
   "build>=1.2",
@@ -43,6 +44,7 @@ dev = [
   "djangorestframework>=3.15.2,<3.19",
   "mypy>=1.10",
   "pytest-cov>=5",
+  "pytest-django>=4.8,<5",
   "ruff>=0.5",
   "types-PyYAML>=6.0",
 ]
