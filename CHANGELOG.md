@@ -26,6 +26,11 @@ the public API leaves alpha.
   reporting.
 - pytest-xdist worker aggregation with controller-only discovery, completeness gates, coverage
   thresholds, terminal output, and JSON writing.
+- Migrated authentication integration coverage for session login, CSRF-enforced writes, cookies,
+  logout, database-backed DRF tokens, invalid credentials, and anonymous clients.
+- Request/response boundary coverage for real file uploads, custom parser/renderer media types,
+  header override precedence, redirects and trailing slashes, empty and opaque bodies, DRF
+  exceptions, and async Django views.
 
 ### Changed
 

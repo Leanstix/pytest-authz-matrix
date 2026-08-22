@@ -58,5 +58,7 @@ It also installs pytest-xdist 3.x and runs a two-worker strict terminal/JSON rep
 The complete suite includes executable DRF applications. It covers router-registered ViewSets,
 standard and custom actions, nested namespaces, APIViews, function views, primary HTTP methods,
 JSON and multipart request formats, and authenticated and anonymous `APIClient` behavior. It also
-verifies plain Django `Client` encoding and generic custom-client fallback. See
+verifies real session/CSRF and token authentication, cookie/logout state, uploaded files, custom
+media types, header precedence, redirect and exception responses, opaque bodies, async Django
+views, plain Django `Client` encoding, and generic custom-client fallback. See
 [Django and DRF integration](django.md) for the precise behavior.
