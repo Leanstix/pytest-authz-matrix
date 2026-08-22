@@ -14,6 +14,7 @@ the public API leaves alpha.
 - FastAPI `APIRoute` discovery and authorization route-coverage reporting.
 - Dedicated FastAPI and DRF adapter regression tests.
 - FastAPI documentation and a runnable example project.
+- Clean-install smoke tests for built wheels and source distributions.
 
 ### Changed
 
@@ -24,6 +25,7 @@ the public API leaves alpha.
 - `request.format` now represents adapter-neutral request intent. `json` is translated to DRF
   renderer semantics or FastAPI/HTTPX `json=` semantics as appropriate.
 - CLI help and terminal reporting refer to API route coverage rather than assuming DRF.
+- Source distributions deliberately include the complete test suite, including pytester setup.
 
 ### Compatibility
 
