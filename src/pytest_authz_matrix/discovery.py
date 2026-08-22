@@ -141,18 +141,21 @@ def normalize_path(path: str) -> str:
 
 
 def _view_methods(callback: Any, view_class: type[Any]) -> tuple[str, ...]:
+    declared = tuple(str(method).lower() for method in getattr(view_class, "http_method_names", ()))
+    enabled = {
+        method.upper() for method in declared if method.upper() not in {"HEAD", "OPTIONS"}
+    }
     actions = getattr(callback, "actions", None)
     if actions:
-        methods = actions.keys()
+        methods = (method for method in actions if str(method).upper() in enabled)
     else:
         methods = (
             method
-            for method in getattr(view_class, "http_method_names", ())
+            for method in declared
+            if method.upper() in enabled
             if callable(getattr(view_class, method, None))
         )
-    allowed = {
-        str(method).upper() for method in methods if str(method).upper() not in {"HEAD", "OPTIONS"}
-    }
+    allowed = {str(method).upper() for method in methods}
     return tuple(sorted(allowed))
 
 
@@ -160,12 +163,13 @@ def _is_format_suffix_pattern(pattern: Any) -> bool:
     """Return whether DRF added this as a content-negotiation URL alias."""
 
     rendered = str(pattern.pattern)
-    return "<drf_format_suffix:format>" in rendered or "(?P<format>" in rendered
+    return "<drf_format_suffix:format>" in rendered or r"\.(?P<format>" in rendered
 
 
 def _matches(route: DiscoveredRoute, contract: ContractSpec) -> bool:
     if route.method != contract.method:
         return False
     if contract.route_name and route.name:
-        return contract.route_name in {route.name, route.name.rsplit(":", 1)[-1]}
+        name_matches = contract.route_name in {route.name, route.name.rsplit(":", 1)[-1]}
+        return name_matches and normalize_path(route.pattern) == normalize_path(contract.path)
     return normalize_path(route.pattern) == normalize_path(contract.path)
