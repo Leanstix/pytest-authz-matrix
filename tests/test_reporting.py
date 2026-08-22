@@ -58,9 +58,11 @@ contracts:
         relationship=None,
         expectation=contract.matrix["member"][None],
     )
+    worker = AuthorizationReporter()
+    worker.record_execution(spec)
+    worker.record_case(spec, passed=True, actual_status=200)
     reporter = AuthorizationReporter()
-    reporter.record_execution(spec)
-    reporter.record_case(spec, passed=True, actual_status=200)
+    reporter.merge_worker_state(worker.worker_state())
     reporter.finalize(config)
 
     assert reporter.route_coverage == 50.0
@@ -93,3 +95,41 @@ contracts:
     ]
     assert "  excluded: GET api-root (Generated router index)" in reporter.terminal_lines()
     assert "  excluded: GET health-check (Public liveness read)" in reporter.terminal_lines()
+
+
+def test_worker_merge_deduplicates_cases_and_preserves_a_failure() -> None:
+    passed = {
+        "executed": ["booking.list[member-endpoint-allow]"],
+        "results": [
+            {
+                "case_id": "booking.list[member-endpoint-allow]",
+                "contract": "booking.list",
+                "passed": True,
+                "actual_status": 200,
+                "expected_statuses": [200],
+            }
+        ],
+    }
+    failed = {
+        "executed": ["booking.list[member-endpoint-allow]"],
+        "results": [
+            {
+                "case_id": "booking.list[member-endpoint-allow]",
+                "contract": "booking.list",
+                "passed": False,
+                "actual_status": 403,
+                "expected_statuses": [200],
+            }
+        ],
+    }
+
+    reporter = AuthorizationReporter()
+    reporter.merge_worker_state(passed)
+    reporter.merge_worker_state(failed)
+    reporter.merge_worker_state(passed)
+
+    assert reporter.executed == {"booking.list[member-endpoint-allow]"}
+    assert len(reporter.results) == 1
+    result = reporter.results["booking.list[member-endpoint-allow]"]
+    assert result.passed is False
+    assert result.actual_status == 403
