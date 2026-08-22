@@ -75,6 +75,8 @@ def discover_drf_routes() -> DiscoveryResult:
                 continue
             if not isinstance(item, URLPattern):
                 continue
+            if _is_format_suffix_pattern(item):
+                continue
 
             callback = item.callback
             view_class = getattr(callback, "cls", None)
@@ -144,6 +146,13 @@ def _view_methods(callback: Any, view_class: type[Any]) -> tuple[str, ...]:
         str(method).upper() for method in methods if str(method).upper() not in {"HEAD", "OPTIONS"}
     }
     return tuple(sorted(allowed))
+
+
+def _is_format_suffix_pattern(pattern: Any) -> bool:
+    """Return whether DRF added this as a content-negotiation URL alias."""
+
+    rendered = str(pattern.pattern)
+    return "<drf_format_suffix:format>" in rendered or "(?P<format>" in rendered
 
 
 def _matches(route: DiscoveredRoute, contract: ContractSpec) -> bool:

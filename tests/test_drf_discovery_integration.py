@@ -222,3 +222,70 @@ def test_route_name_matching():
     result = pytester.runpytest_subprocess("-q")
 
     result.assert_outcomes(passed=1)
+
+
+def test_default_router_discovers_canonical_routes_without_format_aliases(
+    pytester: pytest.Pytester,
+) -> None:
+    pytester.makepyfile(
+        api_urls="""
+from django.urls import include, path
+from rest_framework.response import Response
+from rest_framework.routers import DefaultRouter
+from rest_framework.viewsets import ViewSet
+
+
+class BookingViewSet(ViewSet):
+    def list(self, request):
+        return Response([])
+
+    def retrieve(self, request, pk=None):
+        return Response({'id': pk})
+
+
+router = DefaultRouter()
+router.register('bookings', BookingViewSet, basename='booking')
+
+urlpatterns = [
+    path('api/', include((router.urls, 'api'), namespace='v1')),
+]
+"""
+    )
+    pytester.makeconftest(
+        """
+from django.conf import settings
+
+if not settings.configured:
+    settings.configure(
+        SECRET_KEY='test',
+        ROOT_URLCONF='api_urls',
+        ALLOWED_HOSTS=['testserver'],
+        REST_FRAMEWORK={'UNAUTHENTICATED_USER': None},
+    )
+
+import django
+django.setup()
+"""
+    )
+    pytester.makepyfile(
+        """
+from pytest_authz_matrix.discovery import discover_drf_routes
+
+
+def test_default_router_inventory():
+    result = discover_drf_routes()
+
+    assert result.available, result.reason
+    assert {(route.method, route.name) for route in result.routes} == {
+        ('GET', 'v1:api-root'),
+        ('GET', 'v1:booking-list'),
+        ('GET', 'v1:booking-detail'),
+    }
+    assert len(result.routes) == 3
+    assert not any('format' in route.pattern for route in result.routes)
+"""
+    )
+
+    result = pytester.runpytest_subprocess("-q")
+
+    result.assert_outcomes(passed=1)
