@@ -29,6 +29,12 @@ class Response:
     data: Any = None
 
 
+@dataclass
+class ContentResponse:
+    status_code: int
+    content: bytes
+
+
 class FakeClient:
     def __init__(self, status: int = 200) -> None:
         self.status = status
@@ -126,6 +132,16 @@ def test_failure_explains_case_and_response() -> None:
 
     with pytest.raises(AssertionError, match=r"booking.update\[owner-owned-allow\].*200, 204.*403"):
         case.run()
+
+
+def test_failure_safely_reports_opaque_non_utf8_response_content() -> None:
+    case, _ = make_case(expected=(200,))
+
+    with pytest.raises(AssertionError) as error:
+        case.assert_response(ContentResponse(status_code=418, content=b"\xff\xfe"))
+
+    assert "got 418" in str(error.value)
+    assert "response='��'" in str(error.value)
 
 
 def test_missing_relationship_has_actionable_error() -> None:
