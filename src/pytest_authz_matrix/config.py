@@ -13,10 +13,12 @@ from pytest_authz_matrix.models import (
     DEFAULT_OUTCOMES,
     ActorSpec,
     ContractSpec,
+    CoverageSpec,
     Expectation,
     MatrixConfig,
     RequestSpec,
     ResourceSpec,
+    RouteExclusionSpec,
 )
 
 
@@ -52,7 +54,45 @@ def load_config(path: str | Path) -> MatrixConfig:
         resources=resources,
         outcomes=outcomes,
         contracts=contracts,
+        coverage=_parse_coverage(root.get("coverage", {})),
     )
+
+
+def _parse_coverage(raw: Any) -> CoverageSpec:
+    value = _mapping(raw, "coverage")
+    raw_exclusions = value.get("exclude", [])
+    if not isinstance(raw_exclusions, list):
+        raise AuthzConfigurationError("coverage.exclude must be a list")
+
+    exclusions: list[RouteExclusionSpec] = []
+    selectors: set[tuple[str | None, str | None, str | None]] = set()
+    for index, raw_exclusion in enumerate(raw_exclusions):
+        location = f"coverage.exclude[{index}]"
+        exclusion = _mapping(raw_exclusion, location)
+        reason = _required_string(exclusion, "reason", location)
+        if not reason.strip():
+            raise AuthzConfigurationError(f"{location}.reason must not be blank")
+        method = _optional_nonempty_string(exclusion, "method", location)
+        route_name = _optional_nonempty_string(exclusion, "route_name", location)
+        path = _optional_nonempty_string(exclusion, "path", location)
+        if (route_name is None) == (path is None):
+            raise AuthzConfigurationError(
+                f"{location} must define exactly one of route_name or path"
+            )
+        normalized_method = method.upper() if method is not None else None
+        selector = (normalized_method, route_name, path)
+        if selector in selectors:
+            raise AuthzConfigurationError(f"{location} duplicates an earlier route exclusion")
+        selectors.add(selector)
+        exclusions.append(
+            RouteExclusionSpec(
+                reason=reason,
+                method=normalized_method,
+                route_name=route_name,
+                path=path,
+            )
+        )
+    return CoverageSpec(exclusions=tuple(exclusions))
 
 
 def _parse_outcomes(raw: Any) -> dict[str, tuple[int, ...]]:
@@ -238,4 +278,13 @@ def _optional_string(
     result = value.get(key, default)
     if result is not None and not isinstance(result, str):
         raise AuthzConfigurationError(f"{location}.{key} must be a string or null")
+    return result
+
+
+def _optional_nonempty_string(
+    value: Mapping[str, Any], key: str, location: str
+) -> str | None:
+    result = _optional_string(value, key, location)
+    if result is not None and not result.strip():
+        raise AuthzConfigurationError(f"{location}.{key} must be a non-empty string or null")
     return result

@@ -267,9 +267,30 @@ import django
 django.setup()
 """
     )
+    (pytester.path / "authz-matrix.yml").write_text(
+        """
+version: 1
+actors:
+  member: member_client
+coverage:
+  exclude:
+    - method: GET
+      route_name: api-root
+      reason: Generated DefaultRouter index
+contracts:
+  booking.list:
+    method: GET
+    path: /api/bookings/
+    route_name: booking-list
+    matrix:
+      member: allow
+""",
+        encoding="utf-8",
+    )
     pytester.makepyfile(
         """
-from pytest_authz_matrix.discovery import discover_drf_routes
+from pytest_authz_matrix.config import load_config
+from pytest_authz_matrix.discovery import discover_drf_routes, excluded_routes
 
 
 def test_default_router_inventory():
@@ -283,6 +304,10 @@ def test_default_router_inventory():
     }
     assert len(result.routes) == 3
     assert not any('format' in route.pattern for route in result.routes)
+    excluded = excluded_routes(result, load_config('authz-matrix.yml'))
+    assert {route.id: reasons for route, reasons in excluded.items()} == {
+        'GET v1:api-root': ('Generated DefaultRouter index',),
+    }
 """
     )
 
@@ -386,6 +411,7 @@ urlpatterns = [
     path('alpha/', ExampleView.as_view(), name='duplicate'),
     path('beta/', ExampleView.as_view(), name='duplicate'),
     path('unnamed/', ExampleView.as_view()),
+    path('ignored/', ExampleView.as_view()),
 ]
 """
     )
@@ -410,6 +436,11 @@ django.setup()
 version: 1
 actors:
   member: member_client
+coverage:
+  exclude:
+    - method: GET
+      path: /ignored/
+      reason: Deliberately public endpoint
 contracts:
   alpha.retrieve:
     method: GET
@@ -428,16 +459,18 @@ contracts:
     pytester.makepyfile(
         """
 from pytest_authz_matrix.config import load_config
-from pytest_authz_matrix.discovery import covered_routes, discover_drf_routes
+from pytest_authz_matrix.discovery import covered_routes, discover_drf_routes, excluded_routes
 
 
 def test_unambiguous_matching():
     config = load_config('authz-matrix.yml')
     discovery = discover_drf_routes()
     covered, uncovered = covered_routes(discovery, config)
+    excluded = excluded_routes(discovery, config)
 
     assert {route.pattern for route in covered} == {'alpha/', 'unnamed/'}
     assert {route.pattern for route in uncovered} == {'beta/'}
+    assert {route.pattern for route in excluded} == {'ignored/'}
 """
     )
 

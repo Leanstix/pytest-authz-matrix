@@ -117,15 +117,38 @@ def covered_routes(
         return set(), set()
     covered: set[DiscoveredRoute] = set()
     uncovered: set[DiscoveredRoute] = set()
+    excluded = excluded_routes(discovery, config)
     contracts = tuple(
         contract
         for name, contract in config.contracts.items()
         if contract_names is None or name in contract_names
     )
     for route in discovery.routes:
+        if route in excluded:
+            continue
         target = covered if any(_matches(route, contract) for contract in contracts) else uncovered
         target.add(route)
     return covered, uncovered
+
+
+def excluded_routes(
+    discovery: DiscoveryResult,
+    config: MatrixConfig,
+) -> dict[DiscoveredRoute, tuple[str, ...]]:
+    """Return deliberately excluded routes and every matching audit reason."""
+
+    if not discovery.available:
+        return {}
+    excluded: dict[DiscoveredRoute, tuple[str, ...]] = {}
+    for route in discovery.routes:
+        reasons = tuple(
+            exclusion.reason
+            for exclusion in config.coverage.exclusions
+            if _exclusion_matches(route, exclusion.method, exclusion.route_name, exclusion.path)
+        )
+        if reasons:
+            excluded[route] = reasons
+    return excluded
 
 
 def normalize_path(path: str) -> str:
@@ -173,3 +196,20 @@ def _matches(route: DiscoveredRoute, contract: ContractSpec) -> bool:
         name_matches = contract.route_name in {route.name, route.name.rsplit(":", 1)[-1]}
         return name_matches and normalize_path(route.pattern) == normalize_path(contract.path)
     return normalize_path(route.pattern) == normalize_path(contract.path)
+
+
+def _exclusion_matches(
+    route: DiscoveredRoute,
+    method: str | None,
+    route_name: str | None,
+    path: str | None,
+) -> bool:
+    if method is not None and route.method != method:
+        return False
+    if route_name is not None:
+        if route.name is None:
+            return False
+        return route_name in {route.name, route.name.rsplit(":", 1)[-1]}
+    if path is not None:
+        return normalize_path(route.pattern) == normalize_path(path)
+    return False

@@ -28,6 +28,13 @@ resources:
     lookup: uuid
 outcomes:
   allow: [200, 204]
+coverage:
+  exclude:
+    - method: get
+      route_name: api-root
+      reason: Generated router index
+    - path: /health/
+      reason: Public liveness probe
 contracts:
   booking.retrieve:
     method: get
@@ -60,6 +67,10 @@ contracts:
         204,
     )
     assert config.contracts["profile.current"].matrix["anonymous"][None].statuses == (401,)
+    assert config.coverage.exclusions[0].method == "GET"
+    assert config.coverage.exclusions[0].route_name == "api-root"
+    assert config.coverage.exclusions[1].path == "/health/"
+    assert config.coverage.exclusions[1].reason == "Public liveness probe"
 
 
 @pytest.mark.parametrize(
@@ -106,4 +117,65 @@ def test_rejects_unsupported_schema_version(tmp_path: Path) -> None:
     path = write_config(tmp_path / "authz.yml", "version: 2\n")
 
     with pytest.raises(AuthzConfigurationError, match="Unsupported config version"):
+        load_config(path)
+
+
+@pytest.mark.parametrize(
+    ("coverage", "message"),
+    [
+        ("exclude: api-root", "coverage.exclude must be a list"),
+        (
+            "exclude:\n  - route_name: api-root",
+            r"coverage.exclude\[0\].reason",
+        ),
+        (
+            "exclude:\n  - reason: ambiguous\n    route_name: api-root\n    path: /api/",
+            "exactly one of route_name or path",
+        ),
+        (
+            "exclude:\n  - reason: no selector",
+            "exactly one of route_name or path",
+        ),
+        (
+            "exclude:\n  - reason: blank selector\n    path: '   '",
+            "path must be a non-empty string",
+        ),
+        (
+            "exclude:\n  - reason: '   '\n    route_name: api-root",
+            "reason must not be blank",
+        ),
+        (
+            """exclude:
+  - reason: first
+    method: GET
+    route_name: api-root
+  - reason: duplicate
+    method: get
+    route_name: api-root""",
+            "duplicates an earlier route exclusion",
+        ),
+    ],
+)
+def test_rejects_invalid_route_exclusions(
+    tmp_path: Path, coverage: str, message: str
+) -> None:
+    indented_coverage = "\n".join(f"  {line}" for line in coverage.splitlines())
+    path = write_config(
+        tmp_path / "authz.yml",
+        f"""
+version: 1
+actors:
+  owner: owner_client
+coverage:
+{indented_coverage}
+contracts:
+  profile.current:
+    method: GET
+    path: /profile/me/
+    matrix:
+      owner: allow
+""",
+    )
+
+    with pytest.raises(AuthzConfigurationError, match=message):
         load_config(path)

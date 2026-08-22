@@ -13,6 +13,7 @@ from pytest_authz_matrix.discovery import (
     DiscoveryResult,
     covered_routes,
     discover_drf_routes,
+    excluded_routes,
 )
 from pytest_authz_matrix.models import CaseSpec, MatrixConfig
 
@@ -38,6 +39,7 @@ class AuthorizationReporter:
         self.discovery = DiscoveryResult(False, reason="report has not been finalized")
         self.covered: set[DiscoveredRoute] = set()
         self.uncovered: set[DiscoveredRoute] = set()
+        self.excluded: dict[DiscoveredRoute, tuple[str, ...]] = {}
         self.error: str | None = None
 
     def record_execution(self, spec: CaseSpec) -> None:
@@ -55,6 +57,7 @@ class AuthorizationReporter:
     def finalize(self, config: MatrixConfig) -> None:
         self.config = config
         self.discovery = discover_drf_routes()
+        self.excluded = excluded_routes(self.discovery, config)
         self.covered, self.uncovered = covered_routes(
             self.discovery,
             config,
@@ -133,8 +136,12 @@ class AuthorizationReporter:
     def route_coverage(self) -> float | None:
         if not self.discovery.available:
             return None
-        total = len(self.discovery.routes)
+        total = self.eligible_routes
         return 100.0 if total == 0 else len(self.covered) * 100.0 / total
+
+    @property
+    def eligible_routes(self) -> int:
+        return len(self.discovery.routes) - len(self.excluded)
 
     def as_dict(self) -> dict[str, Any]:
         passed = sum(result.passed for result in self.results.values())
@@ -175,12 +182,25 @@ class AuthorizationReporter:
                 "available": self.discovery.available,
                 "reason": self.discovery.reason,
                 "total": len(self.discovery.routes),
+                "eligible": self.eligible_routes,
                 "covered": len(self.covered),
                 "coverage_percent": (
                     round(route_coverage, 2) if route_coverage is not None else None
                 ),
                 "uncovered": [
                     route.id for route in sorted(self.uncovered, key=lambda item: item.id)
+                ],
+                "excluded": [
+                    {
+                        "id": route.id,
+                        "method": route.method,
+                        "name": route.name,
+                        "pattern": route.pattern,
+                        "reasons": list(reasons),
+                    }
+                    for route, reasons in sorted(
+                        self.excluded.items(), key=lambda item: item[0].id
+                    )
                 ],
             },
             "error": self.error,
@@ -220,8 +240,13 @@ class AuthorizationReporter:
         else:
             lines.append(
                 "DRF route coverage: "
-                f"{len(self.covered)}/{len(self.discovery.routes)} ({coverage:.1f}%)"
+                f"{len(self.covered)}/{self.eligible_routes} ({coverage:.1f}%)"
             )
+            for route, reasons in sorted(self.excluded.items(), key=lambda item: item[0].id):
+                lines.append(
+                    f"  excluded: {route.method} {route.name or route.pattern} "
+                    f"({'; '.join(reasons)})"
+                )
             for route in sorted(self.uncovered, key=lambda item: item.id)[:20]:
                 lines.append(f"  missing: {route.method} {route.name or route.pattern}")
             if len(self.uncovered) > 20:
