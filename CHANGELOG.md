@@ -3,6 +3,13 @@
 All notable changes will be documented in this file. The project follows semantic versioning once
 the public API leaves alpha.
 
+## [0.3.0] - 2026-11-21
+
+- Add `check_fastapi(app)` to test anonymous rejection for required FastAPI security
+  dependencies without a configuration file.
+- Include built-in permission expectations and optional Python overrides for actor clients,
+  response statuses, concrete resource paths, and JSON request bodies.
+
 ## [0.2.0] - 2026-11-21
 
 ### Added

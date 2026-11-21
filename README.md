@@ -110,6 +110,23 @@ The DRF adapter preserves the existing `data=...`, `format=...`, and Django URL-
 
 ## FastAPI
 
+Add one pytest test to check required FastAPI security dependencies automatically:
+
+```python
+from pytest_authz_matrix.fastapi import check_fastapi
+
+from app.main import app
+
+
+def test_authorization():
+    check_fastapi(app)
+```
+
+No YAML setup is required. See the [FastAPI guide](https://github.com/Leanstix/pytest-authz-matrix/blob/main/docs/fastapi.md)
+for permission defaults and Python overrides.
+
+### YAML contracts
+
 Actor fixtures return FastAPI/Starlette `TestClient` instances:
 
 ```python

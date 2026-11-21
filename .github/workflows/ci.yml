@@ -52,7 +52,9 @@ jobs:
       - name: Install the oldest supported FastAPI
         run: python -m pip install -e ".[fastapi]" "fastapi==0.110.1"
       - name: Test FastAPI integration
-        run: pytest tests/test_fastapi_adapter.py tests/test_fastapi_case.py tests/test_fastapi_plugin.py
+        run: >-
+          pytest tests/test_fastapi_adapter.py tests/test_fastapi_case.py
+          tests/test_fastapi_defaults.py tests/test_fastapi_plugin.py
 
   package-artifacts:
     name: Package artifact smoke tests

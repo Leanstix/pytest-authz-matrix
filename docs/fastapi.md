@@ -1,7 +1,7 @@
 # FastAPI integration
 
-`pytest-authz-matrix` 0.2 adds first-class FastAPI support while keeping the same authorization
-contract format used by Django REST Framework.
+Use one pytest test to discover and check FastAPI authentication requirements. Add Python
+overrides for your application's roles or resource rules.
 
 ## Install
 
@@ -12,7 +12,69 @@ pip install "pytest-authz-matrix[fastapi]"
 The extra installs FastAPI 0.110.1 or later and HTTPX. FastAPI's synchronous test client is Starlette's
 HTTPX-backed `TestClient`.
 
-## Actor fixtures
+## Start without configuration
+
+```python
+from pytest_authz_matrix.fastapi import check_fastapi
+
+from app.main import app
+
+
+def test_authorization():
+    check_fastapi(app)
+```
+
+FastAPI's required built-in security dependencies identify routes that must reject anonymous
+requests. This includes bearer tokens, API keys, and OAuth2, including dependencies inherited
+from routers. The checker creates an anonymous in-process test client and asserts the first
+HTTP response.
+
+| Permission | Expected HTTP response |
+| --- | --- |
+| `Permission.PUBLIC` | Any 2xx |
+| `Permission.AUTHENTICATED` | 401 or 403 for the actor being checked |
+| `Permission.FORBIDDEN` | 403 |
+| `Permission.CONCEALED` | 404 |
+| An integer such as `201` | That exact status |
+
+`check_fastapi()` returns the number of checks plus `unclassified` and `needs_path` route
+lists. Routes with optional authentication or app-specific policies need an explicit
+expectation. URLs with placeholders need a concrete test path. A call that generates zero
+checks fails.
+
+## Customize in Python
+
+```python
+from pytest_authz_matrix.fastapi import Permission, check_fastapi
+
+
+def test_booking_permissions(app, owner_client, viewer_client):
+    booking = ("GET", "/bookings/{booking_id}")
+    check_fastapi(
+        app,
+        permissions={
+            ("GET", "/health"): Permission.PUBLIC,
+            booking: {
+                "anonymous": Permission.AUTHENTICATED,
+                "viewer": Permission.FORBIDDEN,
+                "owner": 200,
+            },
+        },
+        actors={"owner": owner_client, "viewer": viewer_client},
+        paths={booking: "/bookings/42"},
+    )
+```
+
+Use actor fixtures that return test clients for your isolated app. Role names and ownership
+come from your fixtures and assertions. Use `payloads={route: body}` to send JSON, and put a
+query string in a `paths` value when needed. For a mutating route, provide test data backed by
+an isolated test database.
+
+## YAML contracts
+
+Existing YAML contracts provide per-case pytest parametrization and route coverage reporting.
+
+### Actor fixtures
 
 Return a `TestClient` that already represents the actor:
 
@@ -151,10 +213,3 @@ def authz_app():
 ```
 
 The wrapper should forward the HTTPX request keywords, including `follow_redirects`, to its client.
-
-## What is not auto-detected yet
-
-Version 0.2 detects the framework and route surface. It does not claim to infer arbitrary business
-permission policy. OAuth scopes and structured FastAPI security dependencies are candidates for a
-future permission-introspection layer, while ownership and tenant policy will still require
-application context or developer confirmation.
