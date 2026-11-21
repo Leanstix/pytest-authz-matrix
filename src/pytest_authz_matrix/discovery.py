@@ -55,7 +55,8 @@ def covered_routes(
     uncovered: set[DiscoveredRoute] = set()
     contracts = tuple(config.contracts.values())
     for route in discovery.routes:
-        target = covered if any(_matches(route, contract) for contract in contracts) else uncovered
+        matched = any(_matches(route, contract, discovery.framework) for contract in contracts)
+        target = covered if matched else uncovered
         target.add(route)
     return covered, uncovered
 
@@ -72,9 +73,13 @@ def normalize_path(path: str) -> str:
     return normalized
 
 
-def _matches(route: DiscoveredRoute, contract: ContractSpec) -> bool:
+def _matches(route: DiscoveredRoute, contract: ContractSpec, framework: str | None) -> bool:
     if route.method != contract.method:
         return False
+    if framework == "fastapi":
+        path = _TEMPLATE_PARAMETER.sub("{}", contract.path.split("?", 1)[0])
+        if _TEMPLATE_PARAMETER.sub("{}", route.pattern) != path:
+            return False
     if contract.route_name and route.name:
         return contract.route_name in {route.name, route.name.rsplit(":", 1)[-1]}
-    return normalize_path(route.pattern) == normalize_path(contract.path)
+    return framework == "fastapi" or normalize_path(route.pattern) == normalize_path(contract.path)
