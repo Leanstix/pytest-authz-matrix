@@ -9,7 +9,7 @@ contract format used by Django REST Framework.
 pip install "pytest-authz-matrix[fastapi]"
 ```
 
-The extra installs FastAPI and HTTPX. FastAPI's synchronous test client is Starlette's
+The extra installs FastAPI 0.110.1 or later and HTTPX. FastAPI's synchronous test client is Starlette's
 HTTPX-backed `TestClient`.
 
 ## Actor fixtures
@@ -25,18 +25,20 @@ from app.main import app
 
 @pytest.fixture
 def admin_client(admin_token):
-    return TestClient(
-        app,
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
+    with TestClient(app, headers={"Authorization": f"Bearer {admin_token}"}) as client:
+        yield client
 
 
 @pytest.fixture
 def anonymous_client():
-    return TestClient(app)
+    with TestClient(app) as client:
+        yield client
 ```
 
-The adapter is selected automatically from the client. No framework key is needed in YAML.
+The adapter is selected automatically from the client. Use the context-managed fixtures above
+when your app relies on startup and shutdown events. The adapter checks the first response from
+the contract endpoint. Declare the expected 3xx status in the YAML outcomes when the endpoint
+redirects.
 
 ## Resource fixture
 
@@ -116,9 +118,13 @@ For form-encoded requests use `format: form`, `format: data`, or `format: null`.
 
 ## Route coverage
 
-FastAPI route discovery inventories registered `APIRoute` objects and excludes framework utility
-routes that are not API path operations. A contract is matched by HTTP method plus route name when
-available, falling back to normalized path matching.
+FastAPI route discovery inventories registered path operations on the app, included routers, and
+mounted apps. It includes schema-hidden operations and explicit `HEAD` and `OPTIONS` handlers.
+Built-in documentation routes, WebSockets, and static files are outside this inventory.
+
+A contract matches the HTTP method and path template. Parameter names can differ, but prefixes
+and trailing slashes must match. If supplied, `route_name` must also match. For named mounts,
+use the qualified name such as `admin:booking-detail`.
 
 ```bash
 pytest --authz-report
@@ -143,6 +149,8 @@ able to extract the FastAPI application for route discovery. Override `authz_app
 def authz_app():
     return app
 ```
+
+The wrapper should forward the HTTPX request keywords, including `follow_redirects`, to its client.
 
 ## What is not auto-detected yet
 

@@ -3,7 +3,7 @@
 All notable changes will be documented in this file. The project follows semantic versioning once
 the public API leaves alpha.
 
-## [0.2.0] - 2026-08-18
+## [0.2.0] - 2026-11-21
 
 ### Added
 
@@ -12,7 +12,9 @@ the public API leaves alpha.
 - Automatic FastAPI and DRF adapter detection from actor client fixtures.
 - Optional `authz_app` fixture for custom wrappers that hide their underlying application.
 - FastAPI `APIRoute` discovery and authorization route-coverage reporting.
-- Dedicated FastAPI and DRF adapter regression tests.
+- Dedicated FastAPI and DRF adapter regression tests, including the minimum supported FastAPI.
+- FastAPI coverage includes nested routers, mounted API routes, schema-hidden operations, and
+  explicitly registered `HEAD` and `OPTIONS` methods.
 - FastAPI documentation and a runnable example project.
 - Clean-install smoke tests for built wheels and source distributions.
 
@@ -24,6 +26,8 @@ the public API leaves alpha.
   `route_coverage` instead of the DRF-specific `drf_routes` object.
 - `request.format` now represents adapter-neutral request intent. `json` is translated to DRF
   renderer semantics or FastAPI/HTTPX `json=` semantics as appropriate.
+- FastAPI checks the endpoint's original response before redirects. Coverage requires a matching
+  path and method, plus the route name when specified.
 - CLI help and terminal reporting refer to API route coverage rather than assuming DRF.
 - Source distributions deliberately include the complete test suite, including pytester setup.
 
