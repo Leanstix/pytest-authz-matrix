@@ -9,16 +9,19 @@ def test_fastapi_plugin_expands_cases_and_reports_route_coverage(
     pytester.makeconftest(
         """
 import pytest
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import APIRouter, FastAPI, Header, HTTPException
 from fastapi.testclient import TestClient
 
 app = FastAPI()
+router = APIRouter()
 
-@app.get('/bookings/{booking_id}', name='booking-detail')
+@router.get('/bookings/{booking_id}', name='booking-detail')
 def get_booking(booking_id: int, x_actor: str | None = Header(default=None)):
     if x_actor == 'owner' and booking_id == 1:
         return {'id': booking_id}
     raise HTTPException(status_code=404)
+
+app.include_router(router, prefix='/api')
 
 @pytest.fixture
 def owner_client():
@@ -46,7 +49,7 @@ resources:
 contracts:
   booking.retrieve:
     method: GET
-    path: /bookings/{resource}
+    path: /api/bookings/{resource}
     route_name: booking-detail
     resource: booking
     matrix:

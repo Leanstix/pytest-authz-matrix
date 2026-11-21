@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Sequence
 from typing import Any
 
 from pytest_authz_matrix.discovery import DiscoveredRoute, DiscoveryResult
@@ -69,7 +70,8 @@ class FastAPIAdapter:
                 reason=f"object {type(app).__name__!r} is not a FastAPI application",
             )
         try:
-            from fastapi.routing import APIRoute
+            from fastapi import routing
+            from starlette.routing import Mount
         except ImportError:
             return DiscoveryResult(
                 False,
@@ -77,23 +79,48 @@ class FastAPIAdapter:
                 reason="FastAPI is not installed",
             )
 
-        routes: set[DiscoveredRoute] = set()
-        for route in getattr(app, "routes", ()):
-            if not isinstance(route, APIRoute):
-                continue
-            for method in sorted(route.methods or ()):
-                normalized = method.upper()
-                if normalized in {"HEAD", "OPTIONS"}:
-                    continue
-                routes.add(
-                    DiscoveredRoute(
-                        method=normalized,
-                        name=route.name,
-                        pattern=route.path,
+        def walk(
+            registered: Sequence[Any], prefix: str = "", namespace: str = ""
+        ) -> Iterator[DiscoveredRoute]:
+            for original, effective in _route_contexts(routing, registered):
+                if isinstance(original, Mount):
+                    mount = getattr(effective, "starlette_route", None) or effective
+                    yield from walk(
+                        original.routes,
+                        prefix + mount.path,
+                        namespace + (f"{original.name}:" if original.name else ""),
                     )
-                )
+                elif isinstance(original, routing.APIRoute):
+                    for method in effective.methods or ():
+                        yield DiscoveredRoute(
+                            method=method.upper(),
+                            name=namespace + effective.name,
+                            pattern=prefix + effective.path,
+                        )
+
+        routes = set(walk(app.routes))
         return DiscoveryResult(
             True,
             framework=self.name,
-            routes=tuple(sorted(routes, key=lambda route: route.id)),
+            routes=tuple(sorted(routes, key=lambda route: (route.id, route.pattern))),
         )
+
+
+def _route_contexts(
+    routing: Any, routes: Sequence[Any]
+) -> Iterator[tuple[Any, Any]]:
+    """Resolve effective paths without relying on the OpenAPI schema."""
+    iter_contexts = getattr(routing, "iter_route_contexts", None)
+    if iter_contexts is not None:
+        for context in iter_contexts(routes):
+            yield context.original_route, context
+        return
+
+    for route in routes:
+        # Early lazy router versions predate the public context iterator.
+        included = getattr(route, "effective_route_contexts", None)
+        if included is None:
+            yield route, route
+        else:
+            for context in included():
+                yield context.original_route, context

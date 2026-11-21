@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 
 from pytest_authz_matrix.adapters.fastapi import FastAPIAdapter
@@ -61,4 +61,36 @@ def test_discovers_fastapi_routes() -> None:
         ("GET", "booking-detail", "/bookings/{booking_id}"),
         ("PATCH", "booking-update", "/bookings/{booking_id}"),
         ("GET", "health", "/health"),
+    }
+
+
+
+def test_discovers_nested_routers_and_mounted_apps() -> None:
+    app = FastAPI(openapi_url=None)
+    router = APIRouter()
+    nested = APIRouter()
+    child = FastAPI()
+
+    @nested.api_route(
+        "/{identifier:int}",
+        methods=["HEAD", "OPTIONS"],
+        name="probe",
+        include_in_schema=False,
+    )
+    def probe(identifier: int):
+        return {"id": identifier}
+
+    router.include_router(nested, prefix="/items")
+    app.include_router(router, prefix="/v1")
+    child.include_router(router)
+    app.mount("/internal", child, name="private")
+
+    result = FastAPIAdapter().discover_routes(app)
+
+    assert result.available
+    assert {(route.method, route.name, route.pattern) for route in result.routes} == {
+        ("HEAD", "probe", "/v1/items/{identifier:int}"),
+        ("OPTIONS", "probe", "/v1/items/{identifier:int}"),
+        ("HEAD", "private:probe", "/internal/items/{identifier:int}"),
+        ("OPTIONS", "private:probe", "/internal/items/{identifier:int}"),
     }
