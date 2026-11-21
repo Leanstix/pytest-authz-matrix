@@ -41,7 +41,8 @@ class FastAPIAdapter:
         format: str | None,
         headers: dict[str, str],
     ) -> Any:
-        kwargs: dict[str, Any] = {}
+        # Assert the response from the contract endpoint, including any redirect.
+        kwargs: dict[str, Any] = {"follow_redirects": False}
         if data is not None:
             if format == "json":
                 kwargs["json"] = data
