@@ -71,8 +71,7 @@ class FastAPIAdapter:
                 reason=f"object {type(app).__name__!r} is not a FastAPI application",
             )
         try:
-            from fastapi import routing
-            from starlette.routing import Mount
+            routes = {route for route, _ in iter_fastapi_routes(app)}
         except ImportError:
             return DiscoveryResult(
                 False,
@@ -80,31 +79,39 @@ class FastAPIAdapter:
                 reason="FastAPI is not installed",
             )
 
-        def walk(
-            registered: Sequence[Any], prefix: str = "", namespace: str = ""
-        ) -> Iterator[DiscoveredRoute]:
-            for original, effective in _route_contexts(routing, registered):
-                if isinstance(original, Mount):
-                    mount = getattr(effective, "starlette_route", None) or effective
-                    yield from walk(
-                        original.routes,
-                        prefix + mount.path,
-                        namespace + (f"{original.name}:" if original.name else ""),
-                    )
-                elif isinstance(original, routing.APIRoute):
-                    for method in effective.methods or ():
-                        yield DiscoveredRoute(
-                            method=method.upper(),
-                            name=namespace + effective.name,
-                            pattern=prefix + effective.path,
-                        )
-
-        routes = set(walk(app.routes))
         return DiscoveryResult(
             True,
             framework=self.name,
             routes=tuple(sorted(routes, key=lambda route: (route.id, route.pattern))),
         )
+
+
+def iter_fastapi_routes(app: Any) -> Iterator[tuple[DiscoveredRoute, Any]]:
+    """Yield effective HTTP routes with their dependency metadata."""
+    from fastapi import routing
+    from starlette.routing import Mount
+
+    def walk(
+        registered: Sequence[Any], prefix: str = "", namespace: str = ""
+    ) -> Iterator[tuple[DiscoveredRoute, Any]]:
+        for original, effective in _route_contexts(routing, registered):
+            if isinstance(original, Mount):
+                mount = getattr(effective, "starlette_route", None) or effective
+                yield from walk(
+                    original.routes,
+                    prefix + mount.path,
+                    namespace + (f"{original.name}:" if original.name else ""),
+                )
+            elif isinstance(original, routing.APIRoute):
+                for method in sorted(effective.methods or ()):
+                    route = DiscoveredRoute(
+                        method=method.upper(),
+                        name=namespace + effective.name,
+                        pattern=prefix + effective.path,
+                    )
+                    yield route, effective.dependant
+
+    yield from walk(app.routes)
 
 
 def _route_contexts(
