@@ -90,7 +90,23 @@ def test_booking_retrieve_authorization(authz_case):
 That single test expands into every configured actor/relationship combination with readable case
 IDs.
 
-## Django REST Framework
+## Django and Django REST Framework
+
+Add one pytest test to check Django's declared login requirements and DRF's built-in permissions:
+
+```python
+from pytest_authz_matrix.django import check_django
+
+
+def test_authorization():
+    check_django()
+```
+
+The checker uses the test project's configured Django settings. See the
+[Django guide](https://github.com/Leanstix/pytest-authz-matrix/blob/main/docs/django.md)
+for supported policies and Python overrides.
+
+### YAML contracts with Django REST Framework
 
 Actor fixtures can return DRF `APIClient` instances. Authentication remains application-owned:
 
