@@ -39,6 +39,21 @@ jobs:
       - name: Build distributions
         run: python -m build
 
+  fastapi-minimum:
+    name: FastAPI minimum version
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+      - name: Install the oldest supported FastAPI
+        run: python -m pip install -e ".[fastapi]" "fastapi==0.110.1"
+      - name: Test FastAPI integration
+        run: pytest tests/test_fastapi_adapter.py tests/test_fastapi_case.py tests/test_fastapi_plugin.py
+
   package-artifacts:
     name: Package artifact smoke tests
     runs-on: ubuntu-latest

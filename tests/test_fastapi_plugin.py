@@ -3,22 +3,27 @@ from __future__ import annotations
 import pytest
 
 
-def test_fastapi_plugin_expands_cases_and_reports_route_coverage(
+def test_fastapi_plugin_threshold_distinguishes_routes_with_same_name(
     pytester: pytest.Pytester,
 ) -> None:
     pytester.makeconftest(
         """
 import pytest
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import APIRouter, FastAPI, Header, HTTPException
 from fastapi.testclient import TestClient
 
 app = FastAPI()
+router = APIRouter()
 
-@app.get('/bookings/{booking_id}', name='booking-detail')
+@router.get('/bookings/{booking_id}', name='booking-detail')
 def get_booking(booking_id: int, x_actor: str | None = Header(default=None)):
     if x_actor == 'owner' and booking_id == 1:
         return {'id': booking_id}
     raise HTTPException(status_code=404)
+
+app.include_router(router, prefix='/api')
+
+app.include_router(router, prefix='/legacy')
 
 @pytest.fixture
 def owner_client():
@@ -46,7 +51,7 @@ resources:
 contracts:
   booking.retrieve:
     method: GET
-    path: /bookings/{resource}
+    path: /api/bookings/{resource}
     route_name: booking-detail
     resource: booking
     matrix:
@@ -76,11 +81,12 @@ def test_booking_authorization(authz_case):
     )
 
     result.assert_outcomes(passed=4)
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
     result.stdout.fnmatch_lines(
         [
             "*authorization matrix*",
             "authorization cases: 4/4 asserted, 4 passed, 0 failed",
             "authorization contracts: 1/1 exercised",
-            "FastAPI route coverage: 1/1 (100.0%)",
+            "FastAPI route coverage: 1/2 (50.0%)",
         ]
     )
