@@ -138,3 +138,127 @@ def test_no_cases():
 """
     )
     django_project.runpytest_subprocess("-q").assert_outcomes(passed=2)
+
+
+def test_drf_defaults_and_role_overrides(django_project: pytest.Pytester) -> None:
+    django_project.makepyfile(
+        app_urls="""
+from types import SimpleNamespace
+
+from django.urls import include, path
+from rest_framework.authentication import BaseAuthentication
+from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticatedOrReadOnly
+from rest_framework.response import Response
+from rest_framework.routers import SimpleRouter
+from rest_framework.views import APIView
+from rest_framework.viewsets import ViewSet
+
+class ActorAuthentication(BaseAuthentication):
+    def authenticate(self, request):
+        actor = request.headers.get("X-Actor")
+        if actor is None:
+            return None
+        return SimpleNamespace(is_authenticated=True, is_staff=actor == "staff"), None
+
+class Books(ViewSet):
+    authentication_classes = [ActorAuthentication]
+    permission_classes = [AllowAny]
+
+    @action(detail=False, methods=["get"], permission_classes=[IsAdminUser])
+    def staff(self, request):
+        return Response({"ok": True})
+
+class Catalog(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get(self, request):
+        return Response({"ok": True})
+
+    def post(self, request):
+        raise AssertionError("anonymous actor accessed the write endpoint")
+
+class Dynamic(Catalog):
+    def get_permissions(self):
+        return [AllowAny()]
+
+router = SimpleRouter()
+router.register("books", Books, basename="book")
+urlpatterns = [
+    path("api/", include(router.urls)),
+    path("catalog/", Catalog.as_view()),
+    path("dynamic/", Dynamic.as_view()),
+]
+"""
+    )
+    django_project.makepyfile(
+        """
+from django.test import Client
+
+from pytest_authz_matrix.django import Permission, check_django
+
+def test_drf_automatic():
+    result = check_django()
+    assert result.checked == 2
+    assert result.unclassified == (
+        ("GET", "/catalog/"), ("GET", "/dynamic/"), ("POST", "/dynamic/")
+    )
+
+def test_drf_custom_roles():
+    result = check_django(
+        permissions={
+            ("GET", "/api/books/staff/"): {
+                "anonymous": Permission.AUTHENTICATED,
+                "member": Permission.FORBIDDEN,
+                "staff": Permission.PUBLIC,
+            },
+        },
+        actors={
+            "member": Client(headers={"X-Actor": "member"}),
+            "staff": Client(headers={"X-Actor": "staff"}),
+        },
+    )
+    assert result.checked == 4
+"""
+    )
+    django_project.runpytest_subprocess("-q").assert_outcomes(passed=2)
+
+
+def test_django_login_middleware(django_project: pytest.Pytester) -> None:
+    django_project.makepyfile(
+        app_urls="""
+from django.contrib.auth.decorators import login_not_required
+from django.http import HttpResponse
+from django.urls import path
+
+def guarded(request):
+    raise AssertionError("anonymous user reached a middleware-protected view")
+
+@login_not_required
+def public(request):
+    return HttpResponse()
+
+urlpatterns = [path("guarded/", guarded), path("public/", public)]
+"""
+    )
+    django_project.makepyfile(
+        """
+import django
+import pytest
+from django.test import override_settings
+
+from pytest_authz_matrix.django import check_django
+
+@pytest.mark.skipif(django.VERSION < (5, 1), reason="LoginRequiredMiddleware requires Django 5.1")
+def test_login_middleware():
+    with override_settings(MIDDLEWARE=[
+        "conftest.AnonymousMiddleware", "django.contrib.auth.middleware.LoginRequiredMiddleware"
+    ]):
+        result = check_django()
+    assert result.checked == 1
+    assert result.unclassified == (("GET", "/public/"),)
+"""
+    )
+    result = django_project.runpytest_subprocess("-q")
+    outcomes = result.parseoutcomes()
+    assert outcomes in ({"passed": 1}, {"skipped": 1})

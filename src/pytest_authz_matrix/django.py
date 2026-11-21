@@ -91,7 +91,7 @@ def check_django(
     for key, (literal, callback, view) in routes.items():
         method, pattern = key
         policy = overrides.get(key)
-        inferred = _django_policy(callback, view) if policy is None else None
+        inferred = _django_policy(callback, view, method) if policy is None else None
         if policy is None and inferred is None:
             unclassified.append(key)
             continue
@@ -203,7 +203,7 @@ def _patterns(
             )
 
 
-def _django_policy(callback: Any, view: Any) -> Permission | _LoginRedirect | None:
+def _django_policy(callback: Any, view: Any, method: str) -> Permission | _LoginRedirect | None:
     from django.conf import settings  # type: ignore[import-untyped]
     from django.contrib.auth.decorators import login_required  # type: ignore[import-untyped]
     from django.contrib.auth.mixins import LoginRequiredMixin  # type: ignore[import-untyped]
@@ -233,7 +233,32 @@ def _django_policy(callback: Any, view: Any) -> Permission | _LoginRedirect | No
             if getattr(predicate, "__code__", None) is predicate_code:
                 login_url = getattr(wrapper, "login_url", values.get("login_url"))
                 return _LoginRedirect(resolve_url(login_url or settings.LOGIN_URL))
+    if _drf_requires_credentials(callback, view, method):
+        return Permission.AUTHENTICATED
     return None
+
+
+def _drf_requires_credentials(callback: Any, view: Any, method: str) -> bool:
+    if view is None or not any(
+        base.__module__ == "rest_framework.views" and base.__name__ == "APIView"
+        for base in view.__mro__
+    ):
+        return False
+
+    from rest_framework import permissions as drf  # type: ignore[import-untyped]
+    from rest_framework.views import APIView  # type: ignore[import-untyped]
+
+    if view.get_permissions is not APIView.get_permissions:
+        return False
+    classes = getattr(callback, "initkwargs", {}).get("permission_classes", view.permission_classes)
+    return any(
+        cls is drf.IsAuthenticated
+        or cls is drf.IsAdminUser
+        or cls is drf.DjangoModelPermissions
+        or cls is drf.DjangoObjectPermissions
+        or (cls is drf.IsAuthenticatedOrReadOnly and method not in drf.SAFE_METHODS)
+        for cls in classes
+    )
 
 
 def _function_methods(callback: Any) -> set[str]:
