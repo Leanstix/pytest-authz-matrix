@@ -2,34 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from contextlib import ExitStack
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
 from pytest_authz_matrix.adapters.fastapi import FastAPIAdapter, iter_fastapi_routes
 from pytest_authz_matrix.exceptions import AuthzConfigurationError
-
-RouteKey = tuple[str, str]
-
-
-class Permission(str, Enum):
-    """Expected access outcome for one actor."""
-
-    PUBLIC = "public"
-    AUTHENTICATED = "authenticated"
-    FORBIDDEN = "forbidden"
-    CONCEALED = "concealed"
-
-
-_EXPECTED: Mapping[Permission, Iterable[int]] = {
-    Permission.PUBLIC: range(200, 300),
-    Permission.AUTHENTICATED: (401, 403),
-    Permission.FORBIDDEN: (403,),
-    Permission.CONCEALED: (404,),
-}
+from pytest_authz_matrix.permissions import Permission as Permission
+from pytest_authz_matrix.permissions import RouteKey, expected_statuses
 
 
 class _ActorClient(Protocol):
@@ -112,13 +94,7 @@ def check_fastapi(
         for actor, expectation in expectations.items():
             if actor != "anonymous" and actor not in clients:
                 raise AuthzConfigurationError(f"No test client supplied for actor {actor!r}")
-            if type(expectation) is int and 100 <= expectation <= 599:
-                statuses: Iterable[int] = (expectation,)
-            elif isinstance(expectation, Permission):
-                statuses = _EXPECTED[expectation]
-            else:
-                raise AuthzConfigurationError(f"Invalid permission expectation: {expectation!r}")
-            checks.append((key, path, actor, expectation, statuses))
+            checks.append((key, path, actor, expectation, expected_statuses(expectation)))
 
     if not checks:
         raise AuthzConfigurationError(

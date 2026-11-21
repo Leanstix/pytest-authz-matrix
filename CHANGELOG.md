@@ -3,6 +3,13 @@
 All notable changes will be documented in this file. The project follows semantic versioning once
 the public API leaves alpha.
 
+## [0.4.0] - 2026-11-21
+
+- Add `check_django()` to test built-in Django and Django REST Framework permission
+  declarations without a configuration file.
+- Validate login redirects and inferred DRF permission checks, with Python overrides for
+  actor clients, statuses, concrete URLs, and JSON request bodies.
+
 ## [0.3.0] - 2026-11-21
 
 - Add `check_fastapi(app)` to test anonymous rejection for required FastAPI security
