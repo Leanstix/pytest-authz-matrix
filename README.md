@@ -238,6 +238,12 @@ authz_case.assert_response(response)
 
 `execute()` also accepts per-test `data`, `query`, and `headers` overrides.
 
+## Executed coverage for Python checks
+
+`check_django()` and `check_fastapi(app)` show coverage gaps by default. Add
+`min_coverage=100` to fail your pytest run when any discovered route lacks a check.
+Use the result's `summary()` to display executed routes and actor checks.
+
 ## Route coverage
 
 Enable coverage reporting:

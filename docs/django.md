@@ -61,3 +61,21 @@ The result includes a check count and the `unclassified` and `needs_path` route 
 A run with zero checks fails. App-specific rules, overrides of DRF `get_permissions()`,
 and public routes can be covered by declaring expectations. Function-based Django views
 without a standard HTTP method decorator default to `GET` and accept explicit method overrides.
+
+## Enforce executed coverage in CI
+
+Pass `min_coverage` to enforce a percentage of discovered method and path pairs:
+
+```python
+check_django(min_coverage=100)
+```
+
+Every route with at least one completed check counts once, even when several actors are
+tested. Routes with an unknown permission expectation or missing concrete URL stay in the
+denominator. Status assertion failures fail the test at any threshold. A run that
+generates zero checks remains a configuration error.
+
+Incomplete runs emit `AuthzCoverageWarning`, visible in pytest's warnings summary by
+default. Use `result.summary()` to display coverage on demand. Full route coverage can
+include routes checked with just one actor. Declare explicit expectations for any roles
+and object ownership rules you want to test.

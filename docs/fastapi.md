@@ -42,6 +42,24 @@ lists. Routes with optional authentication or app-specific policies need an expl
 expectation. URLs with placeholders need a concrete test path. A call that generates zero
 checks fails.
 
+## Enforce executed coverage in CI
+
+Pass `min_coverage` to enforce a percentage of discovered method and path pairs:
+
+```python
+check_fastapi(app, min_coverage=100)
+```
+
+Every route with at least one completed check counts once, even when several actors are
+tested. Routes with an unknown permission expectation or missing concrete URL stay in the
+denominator. Status assertion failures fail the test at any threshold. A run that
+generates zero checks remains a configuration error.
+
+Incomplete runs emit `AuthzCoverageWarning`, visible in pytest's warnings summary by
+default. Use `result.summary()` to display coverage on demand. Full route coverage can
+include routes checked with just one actor. Declare explicit expectations for any roles
+and object ownership rules you want to test.
+
 ## Customize in Python
 
 ```python
