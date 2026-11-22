@@ -3,6 +3,13 @@
 All notable changes will be documented in this file. The project follows semantic versioning once
 the public API leaves alpha.
 
+## [0.5.0] - 2026-11-22
+
+- Show executed authorization coverage and reasons for unchecked routes in Django and FastAPI.
+- Add an optional `min_coverage` percentage for enforcing executed route coverage in CI.
+- Exercise both successful checks and permission regressions against a session-authenticated
+  Django/DRF application with SQLite and a FastAPI application with a lifespan.
+
 ## [0.4.0] - 2026-11-21
 
 - Add `check_django()` to test built-in Django and Django REST Framework permission

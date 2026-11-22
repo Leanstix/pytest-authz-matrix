@@ -261,4 +261,45 @@ def test_login_middleware():
     )
     result = django_project.runpytest_subprocess("-q")
     outcomes = result.parseoutcomes()
-    assert outcomes in ({"passed": 1}, {"skipped": 1})
+    assert outcomes in ({"passed": 1, "warnings": 1}, {"skipped": 1})
+
+
+def test_django_coverage_gate_uses_executed_routes(django_project: pytest.Pytester) -> None:
+    django_project.makepyfile(
+        app_urls="""
+from django.contrib.auth.decorators import login_required
+from django.http import HttpResponse
+from django.urls import path
+
+@login_required
+def account(request):
+    return HttpResponse()
+
+def health(request):
+    return HttpResponse()
+
+urlpatterns = [path("account/", account), path("health/", health)]
+"""
+    )
+    django_project.makepyfile(
+        """
+import pytest
+from pytest_authz_matrix.coverage import AuthzCoverageWarning
+from pytest_authz_matrix.django import Permission, check_django
+
+def test_coverage():
+    with pytest.warns(AuthzCoverageWarning, match="1/2 routes"):
+        result = check_django(min_coverage=50)
+    assert result.checked_routes == (("GET", "/account/"),)
+    assert result.coverage_percent == 50
+    assert "GET /health/ (no known permission expectation)" in result.summary()
+    with pytest.raises(AssertionError, match="Required authorization route coverage: 100%"):
+        check_django(min_coverage=100)
+    full = check_django(
+        permissions={("GET", "/health/"): Permission.PUBLIC},
+        min_coverage=100,
+    )
+    assert full.coverage_percent == 100
+"""
+    )
+    django_project.runpytest_subprocess("-q").assert_outcomes(passed=1)
