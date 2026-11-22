@@ -12,6 +12,7 @@ from typing import Any, Protocol
 from urllib.parse import unquote, urlsplit
 
 from pytest_authz_matrix.adapters.django import _view_methods
+from pytest_authz_matrix.coverage import RouteCoverage, finish_checks, validate_minimum
 from pytest_authz_matrix.exceptions import AuthzConfigurationError
 from pytest_authz_matrix.permissions import Permission as Permission
 from pytest_authz_matrix.permissions import RouteKey, expected_statuses
@@ -24,13 +25,10 @@ class _DjangoClient(Protocol):
     def generic(self, method: str, path: str, **kwargs: Any) -> Any: ...
 
 
-@dataclass(frozen=True)
-class DjangoCheckResult:
-    """Number of checks performed and routes that still need test input."""
+class DjangoCheckResult(RouteCoverage):
+    """Executed authorization coverage for Django."""
 
-    checked: int
-    unclassified: tuple[RouteKey, ...]
-    needs_path: tuple[RouteKey, ...]
+    framework = "Django"
 
 
 @dataclass(frozen=True)
@@ -56,6 +54,7 @@ def check_django(
     actors: Mapping[str, _DjangoClient] | None = None,
     paths: Mapping[RouteKey, str] | None = None,
     payloads: Mapping[RouteKey, Any] | None = None,
+    min_coverage: float | None = None,
 ) -> DjangoCheckResult:
     """Check declared authentication requirements against the configured Django URLconf."""
     from django.apps import apps  # type: ignore[import-untyped]
@@ -65,6 +64,7 @@ def check_django(
     if not apps.ready:
         raise AuthzConfigurationError("Initialize Django before calling check_django()")
 
+    validate_minimum(min_coverage)
     overrides = permissions or {}
     urls = paths or {}
     bodies = payloads or {}
@@ -170,9 +170,14 @@ def check_django(
                 f"{method} {key[1]} ({actor}): expected {label}, got HTTP {response.status_code}"
             )
 
-    if failures:
-        raise AssertionError("Django authorization checks failed:\n" + "\n".join(failures))
-    return DjangoCheckResult(len(checks), tuple(unclassified), tuple(needs_path))
+    result = DjangoCheckResult(
+        len(checks),
+        tuple(unclassified),
+        tuple(needs_path),
+        tuple(sorted({case[2] for case in checks})),
+    )
+    finish_checks(result, failures, min_coverage)
+    return result
 
 
 def _route_label(pattern: str) -> str:

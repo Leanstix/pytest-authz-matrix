@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from contextlib import ExitStack
-from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
 from pytest_authz_matrix.adapters.fastapi import FastAPIAdapter, iter_fastapi_routes
+from pytest_authz_matrix.coverage import RouteCoverage, finish_checks, validate_minimum
 from pytest_authz_matrix.exceptions import AuthzConfigurationError
 from pytest_authz_matrix.permissions import Permission as Permission
 from pytest_authz_matrix.permissions import RouteKey, expected_statuses
@@ -18,13 +18,10 @@ class _ActorClient(Protocol):
     def request(self, method: str, url: str, **kwargs: Any) -> Any: ...
 
 
-@dataclass(frozen=True)
-class FastAPICheckResult:
-    """Number of checks performed and any route that still needs test input."""
+class FastAPICheckResult(RouteCoverage):
+    """Executed authorization coverage for FastAPI."""
 
-    checked: int
-    unclassified: tuple[RouteKey, ...]
-    needs_path: tuple[RouteKey, ...]
+    framework = "FastAPI"
 
 
 def check_fastapi(
@@ -34,6 +31,7 @@ def check_fastapi(
     actors: Mapping[str, _ActorClient] | None = None,
     paths: Mapping[RouteKey, str] | None = None,
     payloads: Mapping[RouteKey, Any] | None = None,
+    min_coverage: float | None = None,
 ) -> FastAPICheckResult:
     """Assert the access expectations of explicitly configured and recognized routes.
 
@@ -47,6 +45,7 @@ def check_fastapi(
     from fastapi.testclient import TestClient
     from starlette.routing import compile_path
 
+    validate_minimum(min_coverage)
     policies = permissions or {}
     clients = dict(actors or {})
     route_paths = paths or {}
@@ -122,9 +121,14 @@ def check_fastapi(
                     f"{key[0]} {path} ({actor}): expected {label}, got HTTP {response.status_code}"
                 )
 
-    if failures:
-        raise AssertionError("FastAPI authorization checks failed:\n" + "\n".join(failures))
-    return FastAPICheckResult(len(checks), tuple(unclassified), tuple(needs_path))
+    result = FastAPICheckResult(
+        len(checks),
+        tuple(unclassified),
+        tuple(needs_path),
+        tuple(sorted({case[0] for case in checks})),
+    )
+    finish_checks(result, failures, min_coverage)
+    return result
 
 
 def _requires_credentials(dependant: Any) -> bool:

@@ -128,3 +128,44 @@ def test_unknown_policies_cannot_pass_without_running_checks() -> None:
             permissions={("GET", "/public"): Permission.PUBLIC},
             paths={("GET", "/public"): "//external.test/public"},
         )
+
+
+def test_executed_coverage_counts_routes_instead_of_actors() -> None:
+    from pytest_authz_matrix.coverage import AuthzCoverageWarning
+
+    app = FastAPI()
+
+    @app.get("/status")
+    def status():
+        return {"ok": True}
+
+    @app.get("/records/{record_id}", dependencies=[Depends(HTTPBearer())])
+    def record(record_id: int):
+        return {"id": record_id}
+
+    @app.get("/custom")
+    def custom():
+        return {"ok": True}
+
+    key = ("GET", "/status")
+    with TestClient(app) as viewer:
+        options = {
+            "permissions": {key: {"anonymous": 200, "viewer": 200}},
+            "actors": {"viewer": viewer},
+        }
+        with pytest.warns(AuthzCoverageWarning, match="1/3 routes"):
+            result = check_fastapi(app, **options, min_coverage=100 / 3)
+        with pytest.raises(AssertionError, match="Required authorization route coverage: 34%"):
+            check_fastapi(app, **options, min_coverage=34)
+
+    assert result.checked == 2
+    assert result.total_routes == 3
+    assert result.checked_routes == (key,)
+    assert "GET /custom (no known permission expectation)" in result.summary()
+    assert "GET /records/{record_id} (provide a concrete path)" in result.summary()
+
+
+@pytest.mark.parametrize("minimum", [-1, 101, float("nan"), float("inf"), True])
+def test_invalid_coverage_threshold_fails_before_starting_the_app(minimum: float) -> None:
+    with pytest.raises(AuthzConfigurationError, match="finite percentage"):
+        check_fastapi(FastAPI(), min_coverage=minimum)
